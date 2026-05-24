@@ -1,0 +1,84 @@
+/**
+ * Database schema for StrategyOS
+ * Prisma schema file
+ */
+
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
+
+// generator client {
+//   provider = "prisma-client-js"
+// }
+
+// model Engagement {
+//   id        String   @id @default(cuid())
+//   title     String
+//   description String
+//   clientId  String
+//   client    Client   @relation(fields: [clientId], references: [id])
+//   
+//   analysis  Analysis?
+//   executionTracking ExecutionTracking[]
+//   
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
+
+// model Client {
+//   id        String   @id @default(cuid())
+//   name      String
+//   industry  String
+//   size      String
+//   email     String   @unique
+//   
+//   engagements Engagement[]
+//   
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
+
+// model Analysis {
+//   id        String   @id @default(cuid())
+//   engagementId String @unique
+//   engagement Engagement @relation(fields: [engagementId], references: [id])
+//   
+//   // Analysis components
+//   problemDiagnosis    Json
+//   problemStructuring  Json
+//   deepDiveAnalysis    Json
+//   rootCauseAnalysis   Json
+//   strategicOptions    Json
+//   finalRecommendation Json
+//   executionPlan       Json
+//   kpiTrackingSystem   Json
+//   risksAndMitigation  Json
+//   
+//   // Metadata
+//   firmStyle String  // mckinsey, bcg, bain, accenture
+//   status    String  // draft, final, archived
+//   
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
+
+// model ExecutionTracking {
+//   id        String   @id @default(cuid())
+//   engagementId String
+//   engagement Engagement @relation(fields: [engagementId], references: [id])
+//   
+//   phase     String  // phase1, phase2, phase3
+//   metric    String
+//   value     Float
+//   target    Float
+//   achievement Float  // percentage
+//   
+//   recordedAt DateTime @default(now())
+// }
+
+// schema notes:
+// - will migrate from Prisma setup when infrastructure is ready
+// - supports multi-client multi-engagement architecture
+// - tracks all 9 components of consulting analysis
+// - enables full execution tracking and KPI monitoring

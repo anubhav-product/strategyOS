@@ -1,0 +1,74 @@
+# StrategyOS .gitignore
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+.nyc_output/
+*.lcov
+
+# Production
+/dist
+/build
+/.next
+/out
+
+# Misc
+.DS_Store
+.env
+.env.local
+.env.*.local
+*.pem
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.scalablytyped
+.metals
+.bloop
+
+# Prisma
+.env.local
+.env.*.local
+prisma/.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Database backups
+*.dump
+*.sql
+
+# OS
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Cache
+.cache/
+.eslintcache
+
+# Generated files
+tsconfig.tsbuildinfo
+
+# Package specific
+lerna-debug.log

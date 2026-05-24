@@ -1,0 +1,6 @@
+{
+  "name": "@strategyos/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities and constants",
+  "main": "dist/index.ts"
+}

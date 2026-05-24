@@ -1,0 +1,14 @@
+{
+  "name": "@strategyos/core",
+  "version": "1.0.0",
+  "description": "StrategyOS consulting engine core logic",
+  "main": "dist/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
