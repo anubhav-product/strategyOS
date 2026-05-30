@@ -15,10 +15,51 @@
     @apply scroll-smooth;
     scrollbar-width: thin;
     scrollbar-color: #475569 #1e293b;
+    background-color: #f8fafc;
+    color: #0f172a;
   }
 
-  ::-webkit-scrollbar {
-    @apply w-2;
+  body {
+    min-height: 100%;
+    background-color: inherit;
+    color: inherit;
+  }
+
+  html.dark {
+    color-scheme: dark;
+    background-color: #020617;
+    color: #f8fafc;
+  }
+
+  html:not(.dark) .text-white {
+    color: #0f172a !important;
+  }
+
+  html:not(.dark) .text-slate-300,
+  html:not(.dark) .text-slate-400,
+  html:not(.dark) .text-slate-500,
+  html:not(.dark) .text-slate-600,
+  html:not(.dark) .text-slate-700,
+  html:not(.dark) .placeholder-slate-300,
+  html:not(.dark) .placeholder-slate-400,
+  html:not(.dark) .placeholder-slate-500,
+  html:not(.dark) .placeholder-slate-600 {
+    color: #475569 !important;
+  }
+
+  html:not(.dark) [class*="bg-slate-6"],
+  html:not(.dark) [class*="bg-slate-7"],
+  html:not(.dark) [class*="bg-slate-8"],
+  html:not(.dark) [class*="bg-slate-9"] {
+    background-color: #f8fafc !important;
+  }
+
+  html:not(.dark) [class*="border-slate-"] {
+    border-color: #cbd5e1 !important;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-900;
   }
 
   ::-webkit-scrollbar-track {

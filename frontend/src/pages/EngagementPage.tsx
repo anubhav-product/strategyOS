@@ -35,8 +35,11 @@ export default function EngagementPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-12"
         >
-          <h1 className="text-4xl font-bold text-white mb-2">Enterprise Revenue Growth Strategy</h1>
-          <p className="text-slate-400 mb-4">Acme Corp | Status: In Progress | Started: Apr 15, 2024</p>
+          <h1 className="text-4xl font-bold text-slate-950 dark:text-white mb-2">Enterprise Revenue Growth Strategy</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-4">Acme Corp | Status: In Progress | Started: Apr 15, 2024</p>
+          <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-3xl">
+            This engagement page outlines the current strategic initiative, what it is about, and how execution is progressing. It gives stakeholders a quick view of key performance indicators, milestone status, and what the project will deliver next.
+          </p>
           <div className="flex gap-4">
             <span className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-semibold">
               Implementation Phase
@@ -52,7 +55,7 @@ export default function EngagementPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mb-8 p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl"
+          className="mb-8 p-6 bg-white/90 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl"
         >
           <h2 className="text-2xl font-bold text-white mb-4">Execution Progress</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -77,7 +80,7 @@ export default function EngagementPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="mb-8 p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl"
+          className="mb-8 p-6 bg-white/90 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl"
         >
           <h2 className="text-2xl font-bold text-white mb-4">KPI Performance</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -128,10 +131,10 @@ export default function EngagementPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 + i * 0.05 }}
-              className="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl"
+              className="p-6 bg-white/90 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl"
             >
-              <h3 className="font-semibold text-white mb-2">{phase.name}</h3>
-              <div className="w-full bg-slate-700/50 rounded-full h-2 mb-4">
+              <h3 className="font-semibold text-slate-950 dark:text-white mb-2">{phase.name}</h3>
+              <div className="w-full bg-slate-200 dark:bg-slate-700/50 rounded-full h-2 mb-4">
                 <div
                   className={`h-2 rounded-full transition-all ${
                     phase.status === 'completed'

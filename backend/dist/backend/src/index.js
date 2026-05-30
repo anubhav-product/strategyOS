@@ -128,96 +128,236 @@ app.post('/api/export/pdf', (req, res) => {
         }
         const sanitize = (value) => (value ? value.trim() : 'Not provided.');
         const arrayToBulletedText = (items = []) => (items.length ? items.map(item => `• ${item}`).join('\n') : 'Not provided.');
-        const sectionText = (title, text) => {
-            doc.fontSize(14).fillColor('#111827').text(title, { underline: true });
-            doc.moveDown(0.25);
-            doc.fontSize(11).fillColor('#1f2937').text(text, {
-                lineGap: 4,
-                indent: 4,
-                paragraphGap: 4,
-            });
-            doc.moveDown(0.75);
-        };
         const sanitizedId = analysisId || (0, uuid_1.v4)();
         const filename = `StrategyOS-Consulting-Report-${sanitizedId}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('Cache-Control', 'no-store');
-        const doc = new pdfkit_1.default({ margin: 40, size: 'A4' });
+        const doc = new pdfkit_1.default({ margin: 40, size: 'A4', bufferPages: true });
         doc.pipe(res);
-        doc.font('Helvetica-Bold').fontSize(20).text('StrategyOS Consulting Report', { align: 'center' });
-        doc.moveDown(0.5);
-        doc.font('Helvetica').fontSize(10).fillColor('#9ca3af').text(`Report ID: ${sanitizedId}`);
-        doc.text(`Generated: ${sanitize(generatedAt || new Date().toISOString())}`);
-        doc.moveDown(1);
-        doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(14).text('Executive Growth Visual', { underline: true });
-        doc.moveDown(0.3);
-        const visualSummary = [
-            { label: 'Market', text: analysis.deepDiveAnalysis.market?.implications ?? 'Clarified market opportunity and trial value.' },
-            { label: 'Customer', text: analysis.deepDiveAnalysis.customer?.implications ?? 'Segment-specific onboarding and early success.' },
-            { label: 'Product', text: analysis.deepDiveAnalysis.product?.implications ?? 'Outcome-driven trial experience and differentiation.' },
-            { label: 'Operations', text: analysis.deepDiveAnalysis.operations?.implications ?? 'Repeatable governance and conversion cadence.' },
-            { label: 'Finance', text: analysis.deepDiveAnalysis.financial?.implications ?? 'Improved unit economics via higher conversion.' },
-        ];
-        visualSummary.forEach(item => {
-            doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text(`${item.label}: `, { continued: true });
-            doc.fillColor('#d1d5db').font('Helvetica').text(item.text, { continued: false });
+        const pageWidth = doc.page.width - 80;
+        const drawSectionHeader = (title) => {
             doc.moveDown(0.5);
+            doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(16).text(title);
+            doc.moveDown(0.25);
+        };
+        const drawBodyText = (text) => {
+            doc.fillColor('#323f4b').font('Helvetica').fontSize(11).text(text, {
+                lineGap: 4,
+                indent: 4,
+                paragraphGap: 6,
+            });
+        };
+        const drawBulletedList = (items) => {
+            items.forEach(item => {
+                doc.circle(doc.x + 4, doc.y + 5, 2).fill('#0ea5e9');
+                doc.fillColor('#1f2937').font('Helvetica').fontSize(11).text(`  ${item}`, {
+                    continued: false,
+                    lineGap: 4,
+                    indent: 8,
+                    paragraphGap: 4,
+                });
+            });
+        };
+        const addPageFooter = () => {
+            const range = doc.bufferedPageRange();
+            for (let i = 0; i < range.count; i += 1) {
+                doc.switchToPage(i);
+                const bottom = doc.page.height - 40;
+                doc.font('Helvetica').fontSize(9).fillColor('#94a3b8');
+                doc.text(`StrategyOS | Page ${i + 1} of ${range.count}`, 40, bottom, {
+                    align: 'center',
+                    width: pageWidth,
+                });
+            }
+        };
+        const coverTitle = analysis.problemDiagnosis.restatedProblem || 'StrategyOS Consulting Engagement';
+        // Title Page
+        doc.fillColor('#020617').rect(0, 0, doc.page.width, doc.page.height).fill();
+        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(36).text('StrategyOS', { align: 'center' });
+        doc.moveDown(0.5);
+        doc.font('Helvetica').fontSize(12).fillColor('#38bdf8').text('Premium Strategic Analysis Suite', { align: 'center' });
+        doc.moveDown(2);
+        doc.fillColor('#f8fafc').font('Helvetica-Bold').fontSize(26).text('Executive Consulting Report', {
+            align: 'center',
+            width: pageWidth,
         });
-        doc.moveDown(0.4);
-        const impactMetrics = [
-            { label: 'Conversion growth', value: analysis.finalRecommendation.expectedImpact.businessGrowth ?? 'N/A' },
-            { label: 'Revenue lift', value: analysis.finalRecommendation.expectedImpact.revenueIncrease ?? 'N/A' },
-            { label: 'Retention lift', value: analysis.finalRecommendation.expectedImpact.retentionLift ?? 'N/A' },
+        doc.moveDown(1.5);
+        doc.font('Helvetica').fontSize(14).fillColor('#cbd5e1').text(`Report Title: ${sanitize(coverTitle)}`, { align: 'center' });
+        doc.moveDown(0.5);
+        doc.text(`Generated: ${sanitize(generatedAt || new Date().toISOString())}`, { align: 'center' });
+        doc.text(`Report ID: ${sanitizedId}`, { align: 'center' });
+        doc.moveDown(2);
+        doc.fontSize(11).fillColor('#94a3b8').text('This document presents a structured, board-ready analysis for leadership decision making, designed to combine problem diagnosis, strategic recommendation, execution planning, KPI governance, and risk oversight.', {
+            align: 'center',
+            width: pageWidth - 80,
+            lineGap: 5,
+        });
+        doc.addPage();
+        // Index Page
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(20).text('Table of Contents', { align: 'left' });
+        doc.moveDown(1);
+        const contents = [
+            { title: 'Executive Snapshot', page: 3 },
+            { title: 'Problem Diagnosis', page: 4 },
+            { title: 'Problem Structuring', page: 5 },
+            { title: 'Deep Dive Analysis', page: 6 },
+            { title: 'Root Cause Analysis', page: 8 },
+            { title: 'Strategic Options', page: 10 },
+            { title: 'Final Recommendation', page: 12 },
+            { title: 'Execution Plan', page: 14 },
+            { title: 'KPI Tracking System', page: 16 },
+            { title: 'Risks & Mitigation', page: 18 },
+            { title: 'Closing Summary', page: 20 },
+            { title: 'Thank You', page: 21 },
         ];
-        const metricColors = ['#06b6d4', '#3b82f6', '#a855f7'];
-        impactMetrics.forEach((metric, index) => {
-            doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text(metric.label);
-            doc.fillColor('#9ca3af').font('Helvetica').text(metric.value);
-            const barY = doc.y + 3;
-            const barWidth = 450;
-            const fillWidth = Math.max(50, Math.min(barWidth, barWidth * 0.8));
-            doc.rect(doc.x, barY, barWidth, 8).fill('#111827');
-            doc.fillColor(metricColors[index]).rect(doc.x, barY, fillWidth, 8).fill();
-            doc.moveDown(2);
+        contents.forEach(item => {
+            doc.font('Helvetica-Bold').fontSize(11).fillColor('#0f172a').text(item.title, { continued: true });
+            doc.font('Helvetica').text(` ................................................ ${item.page}`, {
+                align: 'right',
+            });
         });
-        sectionText('1. Problem Diagnosis', `${sanitize(analysis.problemDiagnosis.restatedProblem)}\n\nBusiness context: ${sanitize(analysis.problemDiagnosis.businessContext)}\n\nStakeholders: ${analysis.problemDiagnosis.stakeholders.join(', ')}`);
-        sectionText('2. Problem Structuring', `MECE buckets: ${analysis.problemStructuring.meceBuckets.join(', ')}\n\nKey analytical questions:\n${analysis.problemStructuring.keyAnalyticalQuestions.join('\n')}`);
+        doc.addPage();
+        // Executive Snapshot
+        doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(20).text('Executive Snapshot');
+        doc.moveDown(0.3);
+        doc.font('Helvetica').fontSize(11).fillColor('#333f52').text('A concise view of the most critical findings, recommendation, and impact hypotheses for leadership.', {
+            width: pageWidth,
+            lineGap: 5,
+        });
+        doc.moveDown(1);
+        const snapshotItems = [
+            { label: 'Core business challenge', value: sanitize(analysis.problemDiagnosis.restatedProblem) },
+            { label: 'Recommended strategy', value: sanitize(analysis.finalRecommendation.decision) },
+            { label: 'Impact hypothesis', value: `${sanitize(analysis.finalRecommendation.expectedImpact.businessGrowth ?? 'N/A')} growth, ${sanitize(analysis.finalRecommendation.expectedImpact.revenueIncrease ?? 'N/A')} revenue` },
+            { label: 'Key execution focus', value: sanitize(analysis.executionPlan.criticalPath) },
+        ];
+        snapshotItems.forEach(item => {
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11).text(item.label);
+            doc.fillColor('#475569').font('Helvetica').fontSize(11).text(item.value, { lineGap: 4, paragraphGap: 8 });
+        });
+        doc.moveDown(0.5);
+        doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(14).text('Why this matters', { underline: true });
+        doc.moveDown(0.25);
+        drawBodyText('This analysis is built to align leadership around the core opportunity, surface the root issue, and put forward a confident recommendation that can be executed with governance, KPIs, and risk decisions.');
+        doc.addPage();
+        // Problem Diagnosis
+        drawSectionHeader('1. Problem Diagnosis');
+        drawBodyText(`${sanitize(analysis.problemDiagnosis.restatedProblem)}
+
+Business context: ${sanitize(analysis.problemDiagnosis.businessContext)}
+
+Stakeholders: ${analysis.problemDiagnosis.stakeholders.join(', ')}`);
+        drawSectionHeader('Diagnosis summary');
+        drawBodyText(`Problem classification: ${sanitize(analysis.problemDiagnosis.problemClassification.type.replace('-', ' '))}
+Reasoning: ${sanitize(analysis.problemDiagnosis.problemClassification.reasoning)}`);
+        doc.addPage();
+        // Problem Structuring
+        drawSectionHeader('2. Problem Structuring');
+        drawBodyText('This section uses a MECE structure to ensure the problem is segmented cleanly and analysis is focused on the most impactful causes.');
+        drawSectionHeader('MECE buckets');
+        drawBulletedList(analysis.problemStructuring.meceBuckets);
+        drawSectionHeader('Key analytical questions');
+        drawBulletedList(analysis.problemStructuring.keyAnalyticalQuestions);
+        doc.moveDown(0.5);
+        drawBodyText(`Scope & boundaries: ${sanitize(analysis.problemStructuring.scopeAndBoundaries)}`);
+        doc.addPage();
+        // Deep Dive Analysis
+        drawSectionHeader('3. Deep Dive Analysis');
         const deepDive = analysis.deepDiveAnalysis;
         if (deepDive.market) {
-            sectionText('3.1 Market Analysis', `${sanitize(deepDive.market.competitiveMapping)}\nGrowth: ${sanitize(deepDive.market.growth)}\nImplications: ${sanitize(deepDive.market.implications)}`);
+            drawSectionHeader('3.1 Market');
+            drawBodyText(`Growth: ${sanitize(deepDive.market.growth)}\nCompetitive mapping: ${sanitize(deepDive.market.competitiveMapping)}\nImplications: ${sanitize(deepDive.market.implications)}`);
         }
         if (deepDive.customer) {
-            sectionText('3.2 Customer Analysis', `${sanitize(deepDive.customer.buyingProcess)}\nRetention: ${sanitize(deepDive.customer.retention)}\nNPS: ${sanitize(deepDive.customer.nps)}`);
+            drawSectionHeader('3.2 Customer');
+            drawBodyText(`Buying process: ${sanitize(deepDive.customer.buyingProcess)}\nRetention: ${sanitize(deepDive.customer.retention)}\nNPS: ${sanitize(deepDive.customer.nps)}\nImplications: ${sanitize(deepDive.customer.implications)}`);
         }
         if (deepDive.product) {
-            sectionText('3.3 Product Analysis', `${sanitize(deepDive.product.positioning)}\nProduct-market fit: ${sanitize(deepDive.product.productMarketFit)}`);
+            drawSectionHeader('3.3 Product');
+            drawBodyText(`Positioning: ${sanitize(deepDive.product.positioning)}\nPMF: ${sanitize(deepDive.product.productMarketFit)}\nImplications: ${sanitize(deepDive.product.implications)}`);
         }
         if (deepDive.operations) {
-            sectionText('3.4 Operations Analysis', `Process efficiencies:\n${arrayToBulletedText(deepDive.operations.processEfficiencies)}\n\nScaling challenges:\n${arrayToBulletedText(deepDive.operations.scalingChallenges)}`);
+            drawSectionHeader('3.4 Operations');
+            drawBodyText(`Process efficiencies: ${arrayToBulletedText(deepDive.operations.processEfficiencies)}\nScaling challenges: ${arrayToBulletedText(deepDive.operations.scalingChallenges)}\nImplications: ${sanitize(deepDive.operations.implications)}`);
         }
         if (deepDive.financial) {
-            sectionText('3.5 Financial Analysis', `${sanitize(deepDive.financial.profitability)}\nUnit economics: ${sanitize(deepDive.financial.unitEconomics)}`);
+            drawSectionHeader('3.5 Financial');
+            drawBodyText(`Profitability: ${sanitize(deepDive.financial.profitability)}\nUnit economics: ${sanitize(deepDive.financial.unitEconomics)}\nImplications: ${sanitize(deepDive.financial.implications)}`);
         }
-        sectionText('4. Root Cause Analysis', `Core issue: ${sanitize(analysis.rootCauseAnalysis.coreIssue)}\nHypotheses: ${analysis.rootCauseAnalysis.hypotheses.join('; ')}`);
+        doc.addPage();
+        // Root Cause Analysis
+        drawSectionHeader('4. Root Cause Analysis');
+        drawBodyText(`Core issue: ${sanitize(analysis.rootCauseAnalysis.coreIssue)}\nHypotheses: ${analysis.rootCauseAnalysis.hypotheses.join('; ')}`);
         analysis.rootCauseAnalysis.causes.forEach((cause, index) => {
-            doc.font('Helvetica-Bold').fontSize(12).text(`${index + 1}. ${sanitize(cause.cause)}`);
-            doc.font('Helvetica').fontSize(11).text(`Evidence: ${sanitize(cause.evidence)}`);
-            doc.text(`Why it exists: ${sanitize(cause.whyItExists)}`);
-            doc.text(`Priority: ${sanitize(cause.priority)}`);
-            doc.moveDown(0.5);
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(`Cause ${index + 1}: ${sanitize(cause.cause)}`);
+            drawBodyText(`Evidence: ${sanitize(cause.evidence)}\nWhy it exists: ${sanitize(cause.whyItExists)}\nPriority: ${sanitize(cause.priority)}`);
         });
-        sectionText('5. Strategic Options', analysis.strategicOptions.map(option => `${sanitize(option.name)}: ${sanitize(option.description)}`).join('\n\n'));
-        sectionText('6. Final Recommendation', `${sanitize(analysis.finalRecommendation.decision)}\n\nJustification: ${sanitize(analysis.finalRecommendation.justification)}`);
-        sectionText('7. Execution Plan', `Phase 1: ${sanitize(analysis.executionPlan.phase1.name)}\nPhase 2: ${sanitize(analysis.executionPlan.phase2.name)}\nPhase 3: ${sanitize(analysis.executionPlan.phase3.name)}`);
-        sectionText('8. KPI Tracking System', `Leading indicators: ${analysis.kpiTrackingSystem.leadingIndicators
-            .map(i => `${sanitize(i.name)} (${sanitize(i.target)})`)
-            .join('; ')}\n\nLagging indicators: ${analysis.kpiTrackingSystem.laggingIndicators
-            .map(i => `${sanitize(i.name)} (${sanitize(i.target)})`)
-            .join('; ')}`);
-        sectionText('9. Risks & Mitigation', analysis.risksAndMitigation
-            .map(r => `${sanitize(r.risk)}: ${sanitize(r.mitigationStrategy)} | Contingency: ${sanitize(r.contingencyPlan)}`)
-            .join('\n\n'));
+        doc.addPage();
+        // Strategic Options
+        drawSectionHeader('5. Strategic Options');
+        analysis.strategicOptions.forEach((option, index) => {
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13).text(`${index + 1}. ${sanitize(option.name)}`);
+            drawBodyText(`${sanitize(option.description)}\nMechanism: ${sanitize(option.mechanism)}\nWhen to use: ${sanitize(option.whenToUse)}\nRequired capabilities: ${sanitize(option.requiredCapabilities.join(', '))}`);
+            drawBodyText(`Pros:\n${arrayToBulletedText(option.pros)}\nCons:\n${arrayToBulletedText(option.cons)}`);
+        });
+        doc.addPage();
+        // Final Recommendation
+        drawSectionHeader('6. Final Recommendation');
+        drawBodyText(`${sanitize(analysis.finalRecommendation.decision)}\n\nJustification: ${sanitize(analysis.finalRecommendation.justification)}\n\nWhy this option: ${sanitize(analysis.finalRecommendation.whyThisOption)}`);
+        drawBodyText(`Partner-level insight: ${sanitize(analysis.finalRecommendation.partnerLevelInsight)}`);
+        drawSectionHeader('Success criteria');
+        drawBulletedList(analysis.finalRecommendation.successCriteria);
+        drawSectionHeader('Trade-offs');
+        analysis.finalRecommendation.tradeOffs.forEach(tradeoff => {
+            drawBodyText(`• ${sanitize(tradeoff.what)} — ${sanitize(tradeoff.why)} (${tradeoff.acceptableRisk ? 'Acceptable' : 'High'} risk)`);
+        });
+        doc.addPage();
+        // Execution Plan
+        drawSectionHeader('7. Execution Plan');
+        [analysis.executionPlan.phase1, analysis.executionPlan.phase2, analysis.executionPlan.phase3].forEach(phase => {
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13).text(`${sanitize(phase.name)} — ${sanitize(phase.duration)}`);
+            drawBodyText(`Milestones:\n${arrayToBulletedText(phase.milestones)}\nDependencies:\n${arrayToBulletedText(phase.dependencies)}\nSuccess metrics:\n${arrayToBulletedText(phase.successMetrics)}`);
+        });
+        drawBodyText(`Critical path: ${sanitize(analysis.executionPlan.criticalPath)}`);
+        drawBodyText(`Dependencies: ${arrayToBulletedText(analysis.executionPlan.dependencies)}`);
+        doc.addPage();
+        // KPI Tracking System
+        drawSectionHeader('8. KPI Tracking System');
+        drawBodyText('This KPI system is designed to keep the team accountable to the recommendation and to surface early performance signals.');
+        drawSectionHeader('Leading Indicators');
+        analysis.kpiTrackingSystem.leadingIndicators.forEach(indicator => {
+            drawBodyText(`${sanitize(indicator.name)} — Target: ${sanitize(indicator.target)} | Frequency: ${sanitize(indicator.frequency)} | Linked to: ${sanitize(indicator.linkedToAction)}`);
+        });
+        drawSectionHeader('Lagging Indicators');
+        analysis.kpiTrackingSystem.laggingIndicators.forEach(indicator => {
+            drawBodyText(`${sanitize(indicator.name)} — Target: ${sanitize(indicator.target)} | Frequency: ${sanitize(indicator.frequency)} | Linked to: ${sanitize(indicator.linkedToAction)}`);
+        });
+        drawBodyText(`Dashboard metrics: ${sanitize(analysis.kpiTrackingSystem.dashboardMetrics.join(', '))}`);
+        drawBodyText(`Review cadence: ${sanitize(analysis.kpiTrackingSystem.reviewCadence)}`);
+        doc.addPage();
+        // Risks & Mitigation
+        drawSectionHeader('9. Risks & Mitigation');
+        analysis.risksAndMitigation.forEach((risk, index) => {
+            doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(`${index + 1}. ${sanitize(risk.risk)}`);
+            drawBodyText(`Impact: ${sanitize(risk.impact)} | Probability: ${sanitize(risk.probability)}\nMitigation: ${sanitize(risk.mitigationStrategy)}\nContingency: ${sanitize(risk.contingencyPlan)}\nOwner: ${sanitize(risk.owner)}`);
+        });
+        doc.addPage();
+        // Thank You Page
+        doc.fillColor('#020617').rect(0, 0, doc.page.width, doc.page.height).fill();
+        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(28).text('Thank You', {
+            align: 'center',
+        });
+        doc.moveDown(1);
+        doc.font('Helvetica').fontSize(12).fillColor('#94a3b8').text('We appreciate the opportunity to deliver this strategic analysis. Use this report to align leadership, drive execution, and track outcomes with confidence.', {
+            align: 'center',
+            width: pageWidth,
+            lineGap: 5,
+        });
+        doc.moveDown(2);
+        doc.font('Helvetica-Bold').fontSize(14).fillColor('#38bdf8').text('StrategyOS', { align: 'center' });
+        doc.font('Helvetica').fontSize(11).fillColor('#cbd5e1').text('www.strategyos.ai', { align: 'center' });
+        addPageFooter();
         doc.end();
     }
     catch (error) {

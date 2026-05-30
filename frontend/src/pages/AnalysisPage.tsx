@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import AnalysisForm from '../components/AnalysisForm';
 import AnalysisReport from '../components/AnalysisReport';
 import type { ConsultingAnalysis } from '@core/types';
@@ -16,6 +17,8 @@ interface AnalysisResponse {
 }
 
 export default function AnalysisPage() {
+  const location = useLocation();
+  const initialDescription = (location.state as { initialDescription?: string } | null)?.initialDescription ?? '';
   const [analysisResponse, setAnalysisResponse] = useState<AnalysisResponse | null>(null);
   const [showForm, setShowForm] = useState(true);
 
@@ -38,12 +41,12 @@ export default function AnalysisPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="text-4xl font-bold text-white mb-4">New Consulting Analysis</h1>
-            <p className="text-slate-400 mb-8">
+            <h1 className="text-4xl font-bold text-slate-950 dark:text-white mb-4">New Consulting Analysis</h1>
+            <p className="text-slate-600 dark:text-slate-400 mb-8">
               Describe your business challenge and receive an enterprise-grade consulting analysis
               in minutes.
             </p>
-            <AnalysisForm onSubmit={handleAnalysisGenerated} />
+            <AnalysisForm onSubmit={handleAnalysisGenerated} initialDescription={initialDescription} />
           </motion.div>
         ) : analysisResponse ? (
           <motion.div
@@ -60,7 +63,7 @@ export default function AnalysisPage() {
               </div>
               <button
                 onClick={handleStartNew}
-                className="px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-all"
+                className="px-6 py-3 bg-slate-100 text-slate-950 rounded-lg border border-slate-300 hover:bg-slate-200 transition-all dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600"
               >
                 New Analysis
               </button>

@@ -70,26 +70,33 @@ function SectionLabel({ text }: { text: string }) {
 
 function ReportNavigator() {
   const sections = [
-    { label: 'Diagnosis', anchor: '#problem-diagnosis' },
-    { label: 'Structure', anchor: '#problem-structuring' },
-    { label: 'Deep dive', anchor: '#deep-dive' },
-    { label: 'Recommendation', anchor: '#final-recommendation' },
-    { label: 'Execution', anchor: '#execution-plan' },
-    { label: 'KPIs', anchor: '#kpi-tracking' },
-    { label: 'Risks', anchor: '#risks-mitigation' },
+    { label: 'Problem Diagnosis', anchor: '#problem-diagnosis', page: '2' },
+    { label: 'Problem Structuring', anchor: '#problem-structuring', page: '4' },
+    { label: 'Deep Dive Analysis', anchor: '#deep-dive', page: '6' },
+    { label: 'Root Cause Analysis', anchor: '#root-cause', page: '9' },
+    { label: 'Strategic Options', anchor: '#strategic-options', page: '11' },
+    { label: 'Final Recommendation', anchor: '#final-recommendation', page: '14' },
+    { label: 'Step-by-step Approach', anchor: '#approach', page: '16' },
+    { label: 'Execution Plan', anchor: '#execution-plan', page: '18' },
+    { label: 'KPI Tracking System', anchor: '#kpi-tracking', page: '22' },
+    { label: 'Risks & Mitigation', anchor: '#risks-mitigation', page: '24' },
+    { label: 'Closing Summary', anchor: '#closing-summary', page: '26' },
   ];
 
   return (
     <div className="rounded-[2rem] border border-slate-800/70 bg-slate-950/85 p-5 shadow-[0_25px_60px_rgba(15,23,42,0.3)]">
       <p className="text-slate-400 uppercase tracking-[0.35em] text-xs mb-4">Report navigation</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {sections.map(section => (
           <a
             key={section.anchor}
             href={section.anchor}
-            className="rounded-full border border-slate-700/70 bg-slate-900/80 px-4 py-2 text-sm text-slate-200 hover:border-cyan-400/60 hover:text-white transition-colors"
+            className="rounded-3xl border border-slate-800/70 bg-slate-900/80 px-4 py-3 text-sm text-slate-200 transition-colors hover:border-cyan-400/60 hover:bg-slate-900"
           >
-            {section.label}
+            <div className="flex items-center justify-between gap-4">
+              <span>{section.label}</span>
+              <span className="text-slate-500 text-xs">{section.page}</span>
+            </div>
           </a>
         ))}
       </div>
@@ -148,6 +155,27 @@ function MetricBadge({ label, value, accent }: { label: string; value: string; a
       </div>
       <div className={`h-3 w-16 rounded-full ${accent}`} />
     </div>
+  );
+}
+
+function StepCard({ step, title, detail }: { step: string; title: string; detail: string }) {
+  return (
+    <div className="rounded-3xl bg-slate-950/85 border border-slate-800 p-5 shadow-lg shadow-slate-950/10 transition-all duration-300 hover:-translate-y-1">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-300 font-semibold">{step}</span>
+        <p className="text-white font-semibold">{title}</p>
+      </div>
+      <p className="text-slate-300 leading-relaxed">{detail}</p>
+    </div>
+  );
+}
+
+function TableOfContentsItem({ page, label, anchor }: { page: string; label: string; anchor: string }) {
+  return (
+    <a href={anchor} className="flex items-center justify-between rounded-3xl border border-slate-800/70 bg-slate-900/80 p-4 text-slate-200 transition-colors hover:border-cyan-400/60 hover:bg-slate-900">
+      <span>{label}</span>
+      <span className="text-slate-500 text-sm">{page}</span>
+    </a>
   );
 }
 
@@ -492,13 +520,95 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
     },
   ];
 
-  const executionBenefits = [
-    'Shortens trial-to-paid conversion while preserving unit economics',
-    'Aligns sales, customer success, product, and operations around a growth rhythm',
-    'Creates measurable governance with weekly and quarterly review triggers',
-    'Preserves optionality for phase 2 product differentiation and scale',
-    'Builds a repeatable path from pilot to expansion across priority segments',
+  const reportContents = [
+    { label: '1. Problem Diagnosis', anchor: '#problem-diagnosis', page: '2' },
+    { label: '2. Problem Structuring', anchor: '#problem-structuring', page: '4' },
+    { label: '3. Deep Dive Analysis', anchor: '#deep-dive', page: '6' },
+    { label: '4. Root Cause Analysis', anchor: '#root-cause', page: '9' },
+    { label: '5. Strategic Options', anchor: '#strategic-options', page: '11' },
+    { label: '6. Final Recommendation', anchor: '#final-recommendation', page: '14' },
+    { label: '7. Step-by-step Approach', anchor: '#approach', page: '16' },
+    { label: '8. Execution Plan', anchor: '#execution-plan', page: '18' },
+    { label: '9. KPI Tracking System', anchor: '#kpi-tracking', page: '22' },
+    { label: '10. Risks & Mitigation', anchor: '#risks-mitigation', page: '24' },
+    { label: '11. Closing Summary', anchor: '#closing-summary', page: '26' },
   ];
+
+  const approachSteps = [
+    {
+      step: '01',
+      title: 'Define and frame the problem',
+      detail: analysis.problemDiagnosis.restatedProblem,
+    },
+    {
+      step: '02',
+      title: 'Structure the issue with MECE clarity',
+      detail: analysis.problemStructuring.keyAnalyticalQuestions.join(' · '),
+    },
+    {
+      step: '03',
+      title: 'Analyze the business drivers',
+      detail: 'Deep dive across market, customer, product, operations and finance to validate the root cause.',
+    },
+    {
+      step: '04',
+      title: 'Recommend the highest-impact strategy',
+      detail: analysis.finalRecommendation.justification,
+    },
+    {
+      step: '05',
+      title: 'Turn the recommendation into execution',
+      detail: analysis.executionPlan.criticalPath,
+    },
+  ];
+
+  const closingHighlights = [
+    {
+      label: 'Final decision',
+      value: analysis.finalRecommendation.clearDecision || analysis.finalRecommendation.decision,
+    },
+    {
+      label: 'Key next step',
+      value: analysis.executionPlan.dependencies.length > 0 ? analysis.executionPlan.dependencies[0] : 'Begin with the governance and KPI cadence.',
+    },
+    {
+      label: 'Board-ready summary',
+      value: analysis.finalRecommendation.partnerLevelInsight,
+    },
+  ];
+
+  const tradeOffSummary = analysis.finalRecommendation.tradeOffs.map(tradeoff => `• ${tradeoff.what}: ${tradeoff.why}`);
+
+  const executionBarData = [
+    { label: 'Phase 1', value: analysis.executionPlan.phase1.milestones.length || 2, fill: '#38bdf8' },
+    { label: 'Phase 2', value: analysis.executionPlan.phase2.milestones.length || 2, fill: '#60a5fa' },
+    { label: 'Phase 3', value: analysis.executionPlan.phase3.milestones.length || 2, fill: '#8b5cf6' },
+  ];
+
+  const executionDependencies = analysis.executionPlan.dependencies.length > 0 ? analysis.executionPlan.dependencies : ['Align leadership, define metrics, launch phase 1.'];
+
+  const executionSuccessMetrics = [
+    ...analysis.executionPlan.phase1.successMetrics,
+    ...analysis.executionPlan.phase2.successMetrics,
+    ...analysis.executionPlan.phase3.successMetrics,
+  ];
+
+  const executionStepCount = approachSteps.length;
+
+  const closingAgenda = [
+    'Review recommendation and expected impact',
+    'Agree on execution ownership and timeline',
+    'Confirm KPI governance and reporting rhythm',
+    'Validate risk mitigation and contingency triggers',
+  ];
+
+  const successOutlook = [
+    'Convert clarity into measurable growth outcomes',
+    'Move from diagnosis to action in a structured, low-risk sequence',
+    'Give leadership a single source of truth for execution and review',
+  ];
+
+  const executionTimelineData = executionBarData;
 
   const downloadAnalysisReport = async () => {
     try {
@@ -544,12 +654,39 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
         </div>
       </motion.div>
 
-      <motion.section variants={itemVariants} className="space-y-5">
-        <ReportNavigator />
-        <div className="grid gap-4 lg:grid-cols-3">
-          {sectionSummary.map(item => (
-            <ValueCard key={item.label} label={item.label} value={item.value} />
-          ))}
+      <motion.section variants={itemVariants} className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+          <div className="rounded-[2rem] border border-slate-800/70 bg-slate-950/85 p-6 shadow-[0_30px_70px_rgba(15,23,42,0.25)]">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-slate-400 uppercase tracking-[0.35em] text-xs">Report overview</p>
+                <h2 className="mt-3 text-3xl font-semibold text-white">What this report delivers</h2>
+              </div>
+              <div className="rounded-3xl bg-cyan-500/10 px-4 py-2 text-cyan-300 text-sm uppercase tracking-[0.35em]">Board ready</div>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <ValueCard label="Primary outcome" value={analysis.finalRecommendation.decision} />
+              <ValueCard label="Focus area" value={analysis.problemDiagnosis.problemClassification.type.replace('-', ' ')} />
+            </div>
+            <div className="mt-6 rounded-3xl bg-slate-900/80 border border-slate-800 p-5">
+              <p className="text-slate-400 text-xs uppercase tracking-[0.35em] mb-3">How to use this report</p>
+              <BulletList items={[
+                'Read the diagnosis to confirm the business problem.',
+                'Use the structured analysis to align leadership on the root cause.',
+                'Review the recommendation with trade-offs, execution, and KPI governance.',
+                'Take the closing summary into the next leadership decision meeting.',
+              ]} />
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-800/70 bg-slate-950/85 p-6 shadow-[0_30px_70px_rgba(15,23,42,0.25)]">
+            <p className="text-slate-400 uppercase tracking-[0.35em] text-xs">Table of contents</p>
+            <div className="mt-4 space-y-3">
+              {reportContents.map(item => (
+                <TableOfContentsItem key={item.anchor} page={item.page} label={item.label} anchor={item.anchor} />
+              ))}
+            </div>
+          </div>
         </div>
       </motion.section>
 
@@ -743,7 +880,7 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="space-y-4">
+      <motion.section variants={itemVariants} className="space-y-4" id="root-cause">
         <SectionHeader title="4. Root Cause Analysis" subtitle="Core issues and evidence" />
         <ValueCard label="Core issue" value={analysis.rootCauseAnalysis.coreIssue} />
         <div className="space-y-4">
@@ -758,7 +895,7 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
         </div>
       </motion.section>
 
-      <motion.section variants={itemVariants} className="space-y-4">
+      <motion.section variants={itemVariants} className="space-y-4" id="strategic-options">
         <SectionHeader title="5. Strategic Options" subtitle="High-level strategic choices" />
         {renderStrategicOptions(analysis.strategicOptions)}
       </motion.section>
@@ -796,6 +933,37 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
         </div>
       </motion.section>
 
+      <motion.section variants={itemVariants} className="space-y-4" id="approach">
+        <SectionHeader title="7. Step-by-step Approach" subtitle="How the recommendation becomes a reliable path" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {approachSteps.map(step => (
+            <StepCard key={step.step} step={step.step} title={step.title} detail={step.detail} />
+          ))}
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <ChartCard title="Execution readiness score">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={executionTimelineData} margin={{ left: -20, right: 0, top: 10, bottom: 10 }}>
+                  <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip wrapperStyle={{ backgroundColor: '#0f172a', borderRadius: 12, border: 'none' }} contentStyle={{ backgroundColor: '#111827', borderRadius: 12 }} cursor={{ fill: 'rgba(56,189,248,0.1)' }} />
+                  <Bar dataKey="value" radius={[12, 12, 0, 0]}>
+                    {executionTimelineData.map(entry => (
+                      <Cell key={entry.label} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+          <div className="rounded-[2rem] bg-slate-950/85 border border-slate-800 p-6 shadow-[0_30px_70px_rgba(15,23,42,0.25)]">
+            <p className="text-slate-400 uppercase tracking-[0.35em] text-xs mb-3">Trade-offs summary</p>
+            <BulletList items={tradeOffSummary} />
+          </div>
+        </div>
+      </motion.section>
+
       <motion.section variants={itemVariants} className="space-y-4" id="execution-plan">
         <SectionHeader title="7. Execution Plan" subtitle="Phased delivery and ownership" />
         <div className="space-y-4">
@@ -819,6 +987,31 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
           <div className="space-y-4">
             {renderRisks(analysis.risksAndMitigation)}
           </div>
+        </div>
+      </motion.section>
+
+      <motion.section variants={itemVariants} className="space-y-6" id="closing-summary">
+        <SectionHeader title="Closing Summary" subtitle="Final page: alignment, next steps, and success metrics" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {closingHighlights.map((item, index) => (
+            <ValueCard key={index} label={item.label} value={item.value} />
+          ))}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[2rem] bg-slate-950/85 border border-slate-800 p-6 shadow-[0_30px_70px_rgba(15,23,42,0.25)]">
+            <p className="text-slate-400 uppercase tracking-[0.35em] text-xs mb-3">What success looks like</p>
+            <BulletList items={successOutlook} />
+          </div>
+          <div className="rounded-[2rem] bg-slate-950/85 border border-slate-800 p-6 shadow-[0_30px_70px_rgba(15,23,42,0.25)]">
+            <p className="text-slate-400 uppercase tracking-[0.35em] text-xs mb-3">Next decision forum</p>
+            <BulletList items={closingAgenda} />
+          </div>
+        </div>
+        <div className="rounded-[2rem] bg-slate-900/80 border border-slate-800 p-6">
+          <p className="text-slate-400 text-xs uppercase tracking-[0.35em] mb-3">Report checkpoint</p>
+          <p className="text-white leading-7">
+            This final page is designed to close the loop: make the recommendation simple, highlight the key risks, and ensure the leadership team can move directly into execution with confidence.
+          </p>
         </div>
       </motion.section>
 

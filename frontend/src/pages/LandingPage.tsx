@@ -3,8 +3,8 @@
  * Premium homepage with animated features, visual strategy sections, and executive positioning
  */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -20,6 +20,7 @@ import {
   Layers,
   Rocket,
   Users,
+  Mic,
 } from 'lucide-react';
 
 const featureTiles = [
@@ -53,6 +54,11 @@ const featureTiles = [
     title: 'Consulting Heritage',
     description: 'Inspired by McKinsey, BCG, Bain, and Accenture to feel both modern and authoritative.',
   },
+  {
+    icon: <Mic size={28} className="text-cyan-300" />,
+    title: 'Voice Prompt',
+    description: 'Speak your challenge and launch analysis faster with a voice-driven strategy input.',
+  },
 ];
 
 const workflowSteps = [
@@ -73,7 +79,64 @@ const workflowSteps = [
   },
 ];
 
-export default function LandingPage() {
+interface LandingPageProps {
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
+}
+
+export default function LandingPage({ theme, toggleTheme }: LandingPageProps) {
+  const navigate = useNavigate();
+  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'finished' | 'unsupported'>('idle');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [speechRecognitionClass, setSpeechRecognitionClass] = useState<any>(null);
+
+  useEffect(() => {
+    const recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (recognition) {
+      setSpeechRecognitionClass(() => recognition);
+    } else {
+      setVoiceStatus('unsupported');
+    }
+  }, []);
+
+  const startVoiceCapture = () => {
+    if (!speechRecognitionClass) {
+      setVoiceStatus('unsupported');
+      return;
+    }
+
+    const recognition = new speechRecognitionClass();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setVoiceStatus('listening');
+    recognition.onerror = () => setVoiceStatus('idle');
+    recognition.onend = () => {
+      if (voiceTranscript) {
+        setVoiceStatus('finished');
+      } else {
+        setVoiceStatus('idle');
+      }
+    };
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0].transcript)
+        .join(' ');
+      setVoiceTranscript(transcript);
+    };
+    recognition.start();
+  };
+
+  const clearVoicePrompt = () => {
+    setVoiceTranscript('');
+    setVoiceStatus('idle');
+  };
+
+  const submitVoicePrompt = () => {
+    if (!voiceTranscript.trim()) return;
+    navigate('/analysis', { state: { initialDescription: voiceTranscript.trim() } });
+  };
+
   return (
     <div className="min-h-[calc(100vh-73px)] overflow-hidden">
       <section className="relative overflow-hidden py-24 px-6">
@@ -113,6 +176,72 @@ export default function LandingPage() {
               >
                 Explore the dashboard
               </Link>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white/90 px-6 py-4 text-base font-semibold text-slate-950 hover:bg-slate-100 transition-colors duration-300 dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-100 dark:hover:bg-slate-800"
+              >
+                {theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
+              </button>
+            </div>
+            <div className="mt-4 rounded-3xl border border-cyan-500/20 bg-slate-900/80 p-4 text-sm text-slate-300">
+              <p className="mb-3 text-slate-400">Preview links</p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-[0.35em]">Public demo</p>
+                  <a
+                    href="https://two-insects-talk.loca.lt"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-cyan-300 hover:text-white underline"
+                  >
+                    https://two-insects-talk.loca.lt
+                  </a>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-[0.35em]">Local preview</p>
+                  <span className="text-slate-200">http://localhost:3000</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] items-start">
+              <button
+                type="button"
+                onClick={startVoiceCapture}
+                className="inline-flex items-center justify-center gap-3 rounded-full bg-slate-900/90 px-6 py-4 text-base font-semibold text-white border border-cyan-500/20 hover:bg-slate-800 transition-colors duration-300"
+              >
+                <Mic size={18} className="text-cyan-400" />
+                {voiceStatus === 'listening' ? 'Listening...' : 'Describe your problem by voice'}
+              </button>
+              <div className="rounded-3xl border border-slate-700/80 bg-slate-900/80 p-5 text-left">
+                <p className="text-xs uppercase tracking-[0.35em] text-slate-400 mb-3">Voice input</p>
+                <p className="text-sm text-slate-300 mb-3">
+                  {voiceTranscript
+                    ? voiceTranscript
+                    : voiceStatus === 'unsupported'
+                    ? 'Voice capture is not supported in your browser.'
+                    : 'Speak a brief description of your challenge and use it to open the analysis form.'}
+                </p>
+                {voiceStatus === 'finished' && (
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={submitVoicePrompt}
+                      className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400 transition-colors"
+                    >
+                      Use this prompt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearVoicePrompt}
+                      className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
