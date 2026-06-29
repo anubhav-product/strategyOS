@@ -34,7 +34,6 @@ services:
   - type: web
     name: strategyos-app
     runtime: static
-    region: oregon
     plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
