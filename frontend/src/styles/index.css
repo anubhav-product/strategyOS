@@ -1,135 +1,167 @@
-/**
- * Global CSS Styling
- */
-
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
 @layer base {
-  * {
-    @apply antialiased;
-  }
+  * { @apply antialiased; }
 
   html {
     @apply scroll-smooth;
     scrollbar-width: thin;
-    scrollbar-color: #475569 #1e293b;
-    background-color: #f8fafc;
-    color: #0f172a;
-  }
-
-  body {
-    min-height: 100%;
-    background-color: inherit;
-    color: inherit;
+    scrollbar-color: #94a3b8 transparent;
   }
 
   html.dark {
     color-scheme: dark;
-    background-color: #020617;
-    color: #f8fafc;
+    scrollbar-color: #475569 transparent;
   }
 
-  html:not(.dark) .text-white {
-    color: #0f172a !important;
-  }
-
-  html:not(.dark) .text-slate-300,
-  html:not(.dark) .text-slate-400,
-  html:not(.dark) .text-slate-500,
-  html:not(.dark) .text-slate-600,
-  html:not(.dark) .text-slate-700,
-  html:not(.dark) .placeholder-slate-300,
-  html:not(.dark) .placeholder-slate-400,
-  html:not(.dark) .placeholder-slate-500,
-  html:not(.dark) .placeholder-slate-600 {
-    color: #475569 !important;
-  }
-
-  html:not(.dark) [class*="bg-slate-6"],
-  html:not(.dark) [class*="bg-slate-7"],
-  html:not(.dark) [class*="bg-slate-8"],
-  html:not(.dark) [class*="bg-slate-9"] {
-    background-color: #f8fafc !important;
-  }
-
-  html:not(.dark) [class*="border-slate-"] {
-    border-color: #cbd5e1 !important;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-700 rounded hover:bg-slate-600;
-  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300; }
+  html.dark ::-webkit-scrollbar-thumb { @apply bg-slate-600; }
 }
 
 @layer components {
-  .glass-effect {
-    @apply backdrop-blur-xl bg-slate-900/80 border border-slate-700/50;
+  /* ── Glassmorphism cards ── */
+  .glass-card {
+    @apply backdrop-blur-2xl rounded-[2rem] border shadow-xl;
+    background: rgba(255, 255, 255, 0.75);
+    border-color: rgba(255, 255, 255, 0.65);
+    box-shadow: 0 8px 32px rgba(148, 163, 184, 0.18), 0 1px 0 rgba(255,255,255,0.8) inset;
+  }
+  html.dark .glass-card {
+    background: rgba(15, 23, 42, 0.65);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 48px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
   }
 
+  .glass-sm {
+    @apply backdrop-blur-xl rounded-xl border;
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 16px rgba(148, 163, 184, 0.14);
+  }
+  html.dark .glass-sm {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  /* ── Surface cards (less blurred) ── */
+  .surface {
+    @apply rounded-2xl border;
+    @apply bg-white border-slate-200/80 shadow-sm;
+  }
+  html.dark .surface {
+    @apply bg-slate-800/60 border-slate-700/50 shadow-none;
+  }
+
+  /* ── Form fields ── */
+  .field {
+    @apply w-full px-4 py-3 rounded-xl border transition-all duration-200;
+    @apply bg-white/80 border-slate-200 text-slate-900 placeholder-slate-400;
+    @apply focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/15 focus:bg-white;
+  }
+  html.dark .field {
+    @apply bg-slate-800/60 border-slate-700 text-white placeholder-slate-500;
+    @apply focus:border-cyan-500 focus:ring-cyan-500/10 focus:bg-slate-800/80;
+  }
+
+  /* ── Typography ── */
+  .text-heading {
+    @apply text-slate-900 dark:text-white;
+  }
+  .text-body {
+    @apply text-slate-700 dark:text-slate-300;
+  }
+  .text-muted {
+    @apply text-slate-500 dark:text-slate-400;
+  }
   .gradient-text {
-    @apply bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent;
+  }
+  html.dark .gradient-text {
+    @apply from-blue-400 to-cyan-400;
+  }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl;
+    @apply hover:shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02] transition-all duration-200;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl border transition-all duration-200;
+    @apply border-slate-200 text-slate-700 hover:bg-slate-100;
+  }
+  html.dark .btn-ghost {
+    @apply border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white;
+  }
+
+  /* ── Legacy glass-effect (kept for compat) ── */
+  .glass-effect {
+    @apply backdrop-blur-xl border;
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+  html.dark .glass-effect {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: rgba(71, 85, 105, 0.5);
   }
 
   .card-hover {
-    @apply hover:border-slate-600/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10;
+    @apply transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/8 hover:-translate-y-0.5;
   }
-
-  .btn-primary {
+  .btn-primary-legacy {
     @apply px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/50 transition-all duration-300;
   }
 }
 
 @layer utilities {
   .text-gradient {
-    @apply bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-blue-600 via-cyan-500 to-blue-500 bg-clip-text text-transparent;
   }
-
+  html.dark .text-gradient {
+    @apply from-blue-400 via-cyan-400 to-blue-400;
+  }
   .border-gradient {
-    @apply border border-transparent bg-clip-padding bg-gradient-to-r from-blue-400 to-cyan-400 p-[1px];
+    @apply border border-transparent bg-clip-padding;
+    background-image: linear-gradient(white, white), linear-gradient(to right, #60a5fa, #22d3ee);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+  }
+  html.dark .border-gradient {
+    background-image: linear-gradient(#0f172a, #0f172a), linear-gradient(to right, #60a5fa, #22d3ee);
   }
 }
 
-/* Animation utilities */
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0)   rotate(0deg); }
+  33%       { transform: translateY(-14px) rotate(1.5deg); }
+  66%       { transform: translateY(-7px)  rotate(-1deg); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.8; }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out;
-}
+.animate-fade-in-up { animation: fade-in-up 0.5s ease-out; }
+.animate-float      { animation: float 9s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
 
-/* Smooth transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke;
+/* Smooth theme transitions */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
+  transition-duration: 180ms;
 }
+/* Don't transition transforms (breaks animations) */
+.animate-float, .animate-float * { transition: none; }
 
-button,
-[role='button'],
-a {
-  @apply cursor-pointer;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  @apply outline-none;
-}
+button, [role='button'], a { @apply cursor-pointer; }
+input:focus, textarea:focus, select:focus { @apply outline-none; }

@@ -13,6 +13,8 @@ import LandingPage from './pages/LandingPage';
 import AnalysisPage from './pages/AnalysisPage';
 import DashboardPage from './pages/DashboardPage';
 import EngagementPage from './pages/EngagementPage';
+import AuthPage from './pages/AuthPage';
+import SharedAnalysisPage from './pages/SharedAnalysisPage';
 import './styles/index.css';
 
 export default function App() {
@@ -49,6 +51,8 @@ export default function App() {
             <Route path="/analysis" element={<AnalysisPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/engagement/:id" element={<EngagementPage />} />
+            <Route path="/login" element={<AuthPage />} />
+            <Route path="/s/:token" element={<SharedAnalysisPage />} />
           </Routes>
         </AnimatePresence>
 

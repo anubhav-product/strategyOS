@@ -1,27 +1,38 @@
-/**
- * StrategyOS Backend API
- * Main Express server initialization
- */
-
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import PDFDocument from 'pdfkit';
 import { v4 as uuidv4 } from 'uuid';
+import { PrismaClient } from '@prisma/client';
 import { ConsultingEngine } from '@core/engine';
 import type { BusinessProblem, ConsultingAnalysis } from '@core/types';
+import authRouter from './routes/auth';
+import { optionalAuth, requireAuth, AuthRequest } from './middleware/auth';
 
 dotenv.config();
 
 const app: Express = express();
-const PORT = process.env.BACKEND_PORT || 3001;
+const prisma = new PrismaClient();
+const PORT = process.env.BACKEND_PORT || 3002;
 
-// Middleware
+async function logActivity(req: Request, action: string, userId?: string, metadata?: object) {
+  try {
+    await prisma.activityLog.create({
+      data: {
+        userId: userId || null,
+        action,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+        ip: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+        userAgent: req.headers['user-agent'] || null,
+      },
+    });
+  } catch { /* non-fatal */ }
+}
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
   const requestId = uuidv4();
   res.locals.requestId = requestId;
@@ -29,119 +40,149 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// ============================================
-// API ROUTES
-// ============================================
+// Auth routes
+app.use('/api/auth', authRouter);
 
-interface AnalysisRequest extends Request {
-  body: BusinessProblem;
-}
-
-interface AnalysisResponse {
-  success: boolean;
-  analysisId: string;
-  analysis: ConsultingAnalysis;
-  generatedAt: string;
-}
-
-/**
- * POST /api/analysis/generate
- * Generate comprehensive consulting analysis for a business problem
- */
-app.post('/api/analysis/generate', async (req: AnalysisRequest, res: Response) => {
+// POST /api/analysis/generate — AI-powered, saves to DB
+app.post('/api/analysis/generate', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const problem: BusinessProblem = req.body;
-
-    // Validation
     if (!problem.title || !problem.description) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: title, description',
+      return res.status(400).json({ success: false, error: 'Missing required fields: title, description' });
+    }
+
+    const engine = new ConsultingEngine(problem);
+    const analysis = await engine.generateAnalysis();
+    const analysisId = uuidv4();
+
+    // Save to DB if user is authenticated
+    if (req.user?.userId) {
+      await prisma.analysis.create({
+        data: {
+          id: analysisId,
+          userId: req.user.userId,
+          title: problem.title,
+          industry: problem.industry || '',
+          companySize: problem.companySize,
+          firmStyle: problem.firmStyle,
+          problemData: JSON.stringify(problem),
+          analysisData: JSON.stringify(analysis),
+        },
       });
     }
 
-    // Initialize consulting engine
-    const engine = new ConsultingEngine(problem);
-
-    // Generate analysis
-    const analysis = await engine.generateAnalysis();
-
-    const response: AnalysisResponse = {
-      success: true,
-      analysisId: uuidv4(),
-      analysis,
-      generatedAt: new Date().toISOString(),
-    };
-
-    res.json(response);
+    logActivity(req, 'analysis_generated', req.user?.userId, { title: problem.title, firmStyle: problem.firmStyle, industry: problem.industry });
+    res.json({ success: true, analysisId, analysis, generatedAt: new Date().toISOString() });
   } catch (error: any) {
     console.error('Analysis generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate analysis',
-    });
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate analysis' });
   }
 });
 
-/**
- * GET /api/analysis/:id
- * Retrieve previously generated analysis
- */
-app.get('/api/analysis/:id', (req: Request, res: Response) => {
+// GET /api/analyses — list analyses for authenticated user
+app.get('/api/analyses', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const analyses = await prisma.analysis.findMany({
+      where: { userId: req.user!.userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        industry: true,
+        companySize: true,
+        firmStyle: true,
+        createdAt: true,
+      },
+    });
+    res.json({ success: true, analyses });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-    // In production, fetch from database
+// GET /api/analyses/:id — get single analysis
+app.get('/api/analyses/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const record = await prisma.analysis.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId },
+    });
+    if (!record) return res.status(404).json({ success: false, error: 'Analysis not found' });
     res.json({
       success: true,
-      message: `Retrieval for analysis ${id} would be implemented with database`,
+      analysisId: record.id,
+      analysis: JSON.parse(record.analysisData),
+      problem: JSON.parse(record.problemData),
+      generatedAt: record.createdAt.toISOString(),
     });
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * POST /api/execution/track
- * Track execution metrics and progress
- */
-app.post('/api/execution/track', (req: Request, res: Response) => {
+// POST /api/analyses/:id/share — generate share link
+app.post('/api/analyses/:id/share', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { analysisId, phase, metrics } = req.body;
+    const record = await prisma.analysis.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId },
+    });
+    if (!record) return res.status(404).json({ success: false, error: 'Not found' });
 
+    const token = record.shareToken || uuidv4().replace(/-/g, '').slice(0, 16);
+    await prisma.analysis.update({
+      where: { id: record.id },
+      data: { isPublic: true, shareToken: token },
+    });
+    logActivity(req, 'analysis_shared', req.user?.userId, { analysisId: record.id });
+    res.json({ success: true, shareToken: token });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/s/:token — public shared analysis (no auth)
+app.get('/api/s/:token', async (req: Request, res: Response) => {
+  try {
+    const record = await prisma.analysis.findFirst({
+      where: { shareToken: req.params.token, isPublic: true },
+    });
+    if (!record) return res.status(404).json({ success: false, error: 'Shared analysis not found' });
     res.json({
       success: true,
-      message: 'Execution tracking recorded',
-      trackingId: uuidv4(),
+      analysisId: record.id,
+      analysis: JSON.parse(record.analysisData),
+      problem: JSON.parse(record.problemData),
+      generatedAt: record.createdAt.toISOString(),
+      isShared: true,
     });
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * GET /api/health
- * Health check endpoint
- */
-app.get('/api/health', (req: Request, res: Response) => {
+// GET /api/health
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString(), environment: process.env.NODE_ENV || 'development' });
+});
+
+// GET /api/templates
+app.get('/api/templates', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    templates: {
+      mckinsey: { name: 'McKinsey Style', description: 'Hypothesis-driven, structured analysis' },
+      bcg: { name: 'BCG Growth Focused', description: 'Growth strategy and competitive positioning' },
+      bain: { name: 'Bain Execution Focused', description: 'Implementation excellence and ROI clarity' },
+      accenture: { name: 'Accenture Tech Transformation', description: 'Technology and digital transformation focus' },
+    },
   });
 });
 
-/**
- * POST /api/export/pdf
- * Export analysis as PDF report
- */
+// POST /api/execution/track
+app.post('/api/execution/track', (_req: Request, res: Response) => {
+  res.json({ success: true, message: 'Execution tracking recorded', trackingId: uuidv4() });
+});
+
+// POST /api/export/pdf — high-quality PDF export
 app.post('/api/export/pdf', (req: Request, res: Response) => {
   try {
     const { analysisId, analysis, generatedAt } = req.body as {
@@ -151,14 +192,12 @@ app.post('/api/export/pdf', (req: Request, res: Response) => {
     };
 
     if (!analysis) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing analysis payload for PDF export.',
-      });
+      return res.status(400).json({ success: false, error: 'Missing analysis payload for PDF export.' });
     }
 
     const sanitize = (value?: string) => (value ? value.trim() : 'Not provided.');
-    const arrayToBulletedText = (items: string[] = []) => (items.length ? items.map(item => `• ${item}`).join('\n') : 'Not provided.');
+    const arrayToBulletedText = (items: string[] = []) =>
+      items.length ? items.map(item => `• ${item}`).join('\n') : 'Not provided.';
 
     const sanitizedId = analysisId || uuidv4();
     const filename = `StrategyOS-Consulting-Report-${sanitizedId}.pdf`;
@@ -167,43 +206,65 @@ app.post('/api/export/pdf', (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-store');
 
-    const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
+    const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
     doc.pipe(res);
 
-    const pageWidth = doc.page.width - 80;
+    const pageWidth = doc.page.width - 100;
+    const DARK_BG = '#0f172a';
+    const ACCENT = '#0ea5e9';
+    const TEXT_PRIMARY = '#f8fafc';
+    const TEXT_SECONDARY = '#94a3b8';
+    const CARD_BG = '#1e293b';
+
+    const drawPageHeader = (title: string) => {
+      doc.fillColor(CARD_BG).rect(0, 0, doc.page.width, 40).fill();
+      doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(8).text('StrategyOS', 50, 14, { continued: true });
+      doc.fillColor(TEXT_SECONDARY).text(` — ${title}`, { align: 'left' });
+      doc.fillColor(ACCENT).rect(0, 40, doc.page.width, 2).fill();
+      doc.y = 60;
+    };
+
     const drawSectionHeader = (title: string) => {
       doc.moveDown(0.5);
-      doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(16).text(title);
-      doc.moveDown(0.25);
+      doc.fillColor(ACCENT).rect(50, doc.y, 4, 20).fill();
+      doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(15).text(title, 62, doc.y - 2);
+      doc.fillColor(ACCENT).rect(50, doc.y + 2, pageWidth, 1).fill();
+      doc.moveDown(0.4);
+    };
+
+    const drawSubHeader = (title: string) => {
+      doc.fillColor('#38bdf8').font('Helvetica-Bold').fontSize(12).text(title);
+      doc.moveDown(0.2);
     };
 
     const drawBodyText = (text: string) => {
-      doc.fillColor('#323f4b').font('Helvetica').fontSize(11).text(text, {
-        lineGap: 4,
-        indent: 4,
-        paragraphGap: 6,
-      });
+      doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10).text(text, { lineGap: 5, indent: 4, paragraphGap: 6 });
     };
 
     const drawBulletedList = (items: string[]) => {
       items.forEach(item => {
-        doc.circle(doc.x + 4, doc.y + 5, 2).fill('#0ea5e9');
-        doc.fillColor('#1f2937').font('Helvetica').fontSize(11).text(`  ${item}`, {
-          continued: false,
-          lineGap: 4,
-          indent: 8,
-          paragraphGap: 4,
-        });
+        const y = doc.y;
+        doc.fillColor(ACCENT).circle(58, y + 5, 2).fill();
+        doc.fillColor('#cbd5e1').font('Helvetica').fontSize(10).text(`  ${item}`, 66, y, { lineGap: 4, paragraphGap: 4 });
       });
+    };
+
+    const drawCard = (label: string, value: string) => {
+      const startY = doc.y;
+      doc.fillColor(CARD_BG).roundedRect(50, startY, pageWidth, 50).fill();
+      doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(8).text(label.toUpperCase(), 60, startY + 8);
+      doc.fillColor(TEXT_PRIMARY).font('Helvetica-Bold').fontSize(10).text(value, 60, startY + 20, { width: pageWidth - 20 });
+      doc.y = startY + 60;
     };
 
     const addPageFooter = () => {
       const range = doc.bufferedPageRange();
-      for (let i = 0; i < range.count; i += 1) {
+      for (let i = 0; i < range.count; i++) {
         doc.switchToPage(i);
-        const bottom = doc.page.height - 40;
-        doc.font('Helvetica').fontSize(9).fillColor('#94a3b8');
-        doc.text(`StrategyOS | Page ${i + 1} of ${range.count}`, 40, bottom, {
+        const bottom = doc.page.height - 30;
+        doc.fillColor(CARD_BG).rect(0, bottom - 10, doc.page.width, 40).fill();
+        doc.font('Helvetica').fontSize(8).fillColor(TEXT_SECONDARY);
+        doc.text(`StrategyOS Consulting Report   |   Page ${i + 1} of ${range.count}   |   Confidential`, 50, bottom, {
           align: 'center',
           width: pageWidth,
         });
@@ -212,275 +273,211 @@ app.post('/api/export/pdf', (req: Request, res: Response) => {
 
     const coverTitle = analysis.problemDiagnosis.restatedProblem || 'StrategyOS Consulting Engagement';
 
-    // Title Page
-    doc.fillColor('#020617').rect(0, 0, doc.page.width, doc.page.height).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(36).text('StrategyOS', { align: 'center' });
+    // ── Cover Page ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    doc.fillColor(ACCENT).rect(0, 0, 6, doc.page.height).fill();
+    doc.moveDown(4);
+    doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(11).text('CONFIDENTIAL — EXECUTIVE CONSULTING REPORT', { align: 'center' });
+    doc.moveDown(1);
+    doc.fillColor(TEXT_PRIMARY).font('Helvetica-Bold').fontSize(38).text('StrategyOS', { align: 'center' });
     doc.moveDown(0.5);
-    doc.font('Helvetica').fontSize(12).fillColor('#38bdf8').text('Premium Strategic Analysis Suite', { align: 'center' });
+    doc.fillColor(ACCENT).font('Helvetica').fontSize(13).text('Premium Strategic Analysis', { align: 'center' });
+    doc.moveDown(3);
+    doc.fillColor(TEXT_PRIMARY).font('Helvetica-Bold').fontSize(20).text(sanitize(coverTitle), { align: 'center', width: pageWidth });
     doc.moveDown(2);
-    doc.fillColor('#f8fafc').font('Helvetica-Bold').fontSize(26).text('Executive Consulting Report', {
-      align: 'center',
-      width: pageWidth,
-    });
-    doc.moveDown(1.5);
-    doc.font('Helvetica').fontSize(14).fillColor('#cbd5e1').text(`Report Title: ${sanitize(coverTitle)}`, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.text(`Generated: ${sanitize(generatedAt || new Date().toISOString())}`, { align: 'center' });
+    doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(11).text(`Generated: ${sanitize(generatedAt ? new Date(generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString())}`, { align: 'center' });
     doc.text(`Report ID: ${sanitizedId}`, { align: 'center' });
-    doc.moveDown(2);
-    doc.fontSize(11).fillColor('#94a3b8').text('This document presents a structured, board-ready analysis for leadership decision making, designed to combine problem diagnosis, strategic recommendation, execution planning, KPI governance, and risk oversight.', {
-      align: 'center',
-      width: pageWidth - 80,
-      lineGap: 5,
-    });
-    doc.addPage();
-
-    // Index Page
-    doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(20).text('Table of Contents', { align: 'left' });
     doc.moveDown(1);
-    const contents = [
-      { title: 'Executive Snapshot', page: 3 },
-      { title: 'Problem Diagnosis', page: 4 },
-      { title: 'Problem Structuring', page: 5 },
-      { title: 'Deep Dive Analysis', page: 6 },
-      { title: 'Root Cause Analysis', page: 8 },
-      { title: 'Strategic Options', page: 10 },
-      { title: 'Final Recommendation', page: 12 },
-      { title: 'Execution Plan', page: 14 },
-      { title: 'KPI Tracking System', page: 16 },
-      { title: 'Risks & Mitigation', page: 18 },
-      { title: 'Closing Summary', page: 20 },
-      { title: 'Thank You', page: 21 },
-    ];
-    contents.forEach(item => {
-      doc.font('Helvetica-Bold').fontSize(11).fillColor('#0f172a').text(item.title, { continued: true });
-      doc.font('Helvetica').text(` ................................................ ${item.page}`, {
-        align: 'right',
-      });
-    });
+    doc.fillColor('#334155').font('Helvetica').fontSize(10).text(
+      'This report presents a structured strategic analysis including problem diagnosis, deep-dive insights, strategic options, final recommendation, execution plan, KPI governance, and risk management.',
+      { align: 'center', width: pageWidth - 80, lineGap: 5 }
+    );
     doc.addPage();
 
-    // Executive Snapshot
-    doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(20).text('Executive Snapshot');
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(11).fillColor('#333f52').text('A concise view of the most critical findings, recommendation, and impact hypotheses for leadership.', {
-      width: pageWidth,
-      lineGap: 5,
-    });
+    // ── Executive Snapshot ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Executive Snapshot');
+    drawSectionHeader('Executive Snapshot');
+    [
+      { label: 'Core Challenge', value: sanitize(analysis.problemDiagnosis.restatedProblem) },
+      { label: 'Recommendation', value: sanitize(analysis.finalRecommendation.decision) },
+      { label: 'Revenue Impact', value: sanitize(analysis.finalRecommendation.expectedImpact.revenueIncrease) },
+      { label: 'Critical Path', value: sanitize(analysis.executionPlan.criticalPath) },
+    ].forEach(item => drawCard(item.label, item.value));
     doc.moveDown(1);
-
-    const snapshotItems = [
-      { label: 'Core business challenge', value: sanitize(analysis.problemDiagnosis.restatedProblem) },
-      { label: 'Recommended strategy', value: sanitize(analysis.finalRecommendation.decision) },
-      { label: 'Impact hypothesis', value: `${sanitize(analysis.finalRecommendation.expectedImpact.businessGrowth ?? 'N/A')} growth, ${sanitize(analysis.finalRecommendation.expectedImpact.revenueIncrease ?? 'N/A')} revenue` },
-      { label: 'Key execution focus', value: sanitize(analysis.executionPlan.criticalPath) },
-    ];
-    snapshotItems.forEach(item => {
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11).text(item.label);
-      doc.fillColor('#475569').font('Helvetica').fontSize(11).text(item.value, { lineGap: 4, paragraphGap: 8 });
-    });
-
-    doc.moveDown(0.5);
-    doc.fillColor('#0ea5e9').font('Helvetica-Bold').fontSize(14).text('Why this matters', { underline: true });
-    doc.moveDown(0.25);
-    drawBodyText('This analysis is built to align leadership around the core opportunity, surface the root issue, and put forward a confident recommendation that can be executed with governance, KPIs, and risk decisions.');
+    drawSubHeader('Partner Insight');
+    drawBodyText(sanitize(analysis.finalRecommendation.partnerLevelInsight));
     doc.addPage();
 
-    // Problem Diagnosis
+    // ── Problem Diagnosis ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Problem Diagnosis');
     drawSectionHeader('1. Problem Diagnosis');
-    drawBodyText(`${sanitize(analysis.problemDiagnosis.restatedProblem)}
-
-Business context: ${sanitize(analysis.problemDiagnosis.businessContext)}
-
-Stakeholders: ${analysis.problemDiagnosis.stakeholders.join(', ')}`);
-    drawSectionHeader('Diagnosis summary');
-    drawBodyText(`Problem classification: ${sanitize(analysis.problemDiagnosis.problemClassification.type.replace('-', ' '))}
-Reasoning: ${sanitize(analysis.problemDiagnosis.problemClassification.reasoning)}`);
+    drawSubHeader('Restated Problem');
+    drawBodyText(sanitize(analysis.problemDiagnosis.restatedProblem));
+    drawSubHeader('Business Context');
+    drawBodyText(sanitize(analysis.problemDiagnosis.businessContext));
+    drawSubHeader('Classification');
+    drawBodyText(`Type: ${sanitize(analysis.problemDiagnosis.problemClassification.type)}\nReasoning: ${sanitize(analysis.problemDiagnosis.problemClassification.reasoning)}`);
+    drawSubHeader('Stakeholders');
+    drawBulletedList(analysis.problemDiagnosis.stakeholders);
     doc.addPage();
 
-    // Problem Structuring
+    // ── Problem Structuring ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Problem Structuring');
     drawSectionHeader('2. Problem Structuring');
-    drawBodyText('This section uses a MECE structure to ensure the problem is segmented cleanly and analysis is focused on the most impactful causes.');
-    drawSectionHeader('MECE buckets');
+    drawSubHeader('MECE Buckets');
     drawBulletedList(analysis.problemStructuring.meceBuckets);
-    drawSectionHeader('Key analytical questions');
+    drawSubHeader('Key Analytical Questions');
     drawBulletedList(analysis.problemStructuring.keyAnalyticalQuestions);
-    doc.moveDown(0.5);
-    drawBodyText(`Scope & boundaries: ${sanitize(analysis.problemStructuring.scopeAndBoundaries)}`);
+    drawSubHeader('Scope & Boundaries');
+    drawBodyText(sanitize(analysis.problemStructuring.scopeAndBoundaries));
     doc.addPage();
 
-    // Deep Dive Analysis
+    // ── Deep Dive ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Deep Dive Analysis');
     drawSectionHeader('3. Deep Dive Analysis');
-    const deepDive = analysis.deepDiveAnalysis;
-    if (deepDive.market) {
-      drawSectionHeader('3.1 Market');
-      drawBodyText(`Growth: ${sanitize(deepDive.market.growth)}\nCompetitive mapping: ${sanitize(deepDive.market.competitiveMapping)}\nImplications: ${sanitize(deepDive.market.implications)}`);
+    if (analysis.deepDiveAnalysis.market) {
+      drawSubHeader('Market');
+      drawBodyText(`TAM: ${analysis.deepDiveAnalysis.market.marketSize.tam}  |  SAM: ${analysis.deepDiveAnalysis.market.marketSize.sam}  |  SOM: ${analysis.deepDiveAnalysis.market.marketSize.som}`);
+      drawBodyText(sanitize(analysis.deepDiveAnalysis.market.growth));
+      drawBodyText(`Implication: ${sanitize(analysis.deepDiveAnalysis.market.implications)}`);
     }
-    if (deepDive.customer) {
-      drawSectionHeader('3.2 Customer');
-      drawBodyText(`Buying process: ${sanitize(deepDive.customer.buyingProcess)}\nRetention: ${sanitize(deepDive.customer.retention)}\nNPS: ${sanitize(deepDive.customer.nps)}\nImplications: ${sanitize(deepDive.customer.implications)}`);
+    if (analysis.deepDiveAnalysis.customer) {
+      drawSubHeader('Customer');
+      drawBodyText(sanitize(analysis.deepDiveAnalysis.customer.buyingProcess));
+      drawBodyText(`Retention: ${sanitize(analysis.deepDiveAnalysis.customer.retention)}`);
     }
-    if (deepDive.product) {
-      drawSectionHeader('3.3 Product');
-      drawBodyText(`Positioning: ${sanitize(deepDive.product.positioning)}\nPMF: ${sanitize(deepDive.product.productMarketFit)}\nImplications: ${sanitize(deepDive.product.implications)}`);
+    if (analysis.deepDiveAnalysis.product) {
+      drawSubHeader('Product');
+      drawBodyText(sanitize(analysis.deepDiveAnalysis.product.positioning));
+      drawBodyText(`PMF: ${sanitize(analysis.deepDiveAnalysis.product.productMarketFit)}`);
     }
-    if (deepDive.operations) {
-      drawSectionHeader('3.4 Operations');
-      drawBodyText(`Process efficiencies: ${arrayToBulletedText(deepDive.operations.processEfficiencies)}\nScaling challenges: ${arrayToBulletedText(deepDive.operations.scalingChallenges)}\nImplications: ${sanitize(deepDive.operations.implications)}`);
-    }
-    if (deepDive.financial) {
-      drawSectionHeader('3.5 Financial');
-      drawBodyText(`Profitability: ${sanitize(deepDive.financial.profitability)}\nUnit economics: ${sanitize(deepDive.financial.unitEconomics)}\nImplications: ${sanitize(deepDive.financial.implications)}`);
+    if (analysis.deepDiveAnalysis.financial) {
+      drawSubHeader('Financial');
+      drawBodyText(`CAC: ${analysis.deepDiveAnalysis.financial.keyMetrics.CAC}  |  LTV: ${analysis.deepDiveAnalysis.financial.keyMetrics.LTV}  |  Payback: ${analysis.deepDiveAnalysis.financial.keyMetrics.Payback}`);
+      drawBodyText(sanitize(analysis.deepDiveAnalysis.financial.unitEconomics));
     }
     doc.addPage();
 
-    // Root Cause Analysis
+    // ── Root Cause ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Root Cause Analysis');
     drawSectionHeader('4. Root Cause Analysis');
-    drawBodyText(`Core issue: ${sanitize(analysis.rootCauseAnalysis.coreIssue)}\nHypotheses: ${analysis.rootCauseAnalysis.hypotheses.join('; ')}`);
-    analysis.rootCauseAnalysis.causes.forEach((cause, index) => {
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(`Cause ${index + 1}: ${sanitize(cause.cause)}`);
-      drawBodyText(`Evidence: ${sanitize(cause.evidence)}\nWhy it exists: ${sanitize(cause.whyItExists)}\nPriority: ${sanitize(cause.priority)}`);
+    drawSubHeader('Core Issue');
+    drawBodyText(sanitize(analysis.rootCauseAnalysis.coreIssue));
+    analysis.rootCauseAnalysis.causes.forEach((cause, i) => {
+      drawSubHeader(`Cause ${i + 1}: ${sanitize(cause.cause)} [${cause.priority.toUpperCase()}]`);
+      drawBodyText(`Evidence: ${sanitize(cause.evidence)}`);
+      drawBodyText(`Root origin: ${sanitize(cause.whyItExists)}`);
     });
+    drawSubHeader('Hypotheses');
+    drawBulletedList(analysis.rootCauseAnalysis.hypotheses);
     doc.addPage();
 
-    // Strategic Options
+    // ── Strategic Options ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Strategic Options');
     drawSectionHeader('5. Strategic Options');
-    analysis.strategicOptions.forEach((option, index) => {
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13).text(`${index + 1}. ${sanitize(option.name)}`);
-      drawBodyText(`${sanitize(option.description)}\nMechanism: ${sanitize(option.mechanism)}\nWhen to use: ${sanitize(option.whenToUse)}\nRequired capabilities: ${sanitize(option.requiredCapabilities.join(', '))}`);
-      drawBodyText(`Pros:\n${arrayToBulletedText(option.pros)}\nCons:\n${arrayToBulletedText(option.cons)}`);
+    analysis.strategicOptions.forEach((opt, i) => {
+      drawSubHeader(`${i + 1}. ${sanitize(opt.name)} — ${opt.timeToValue}`);
+      drawBodyText(sanitize(opt.description));
+      drawBodyText(`Mechanism: ${sanitize(opt.mechanism)}`);
+      drawBodyText(`Pros:\n${arrayToBulletedText(opt.pros)}`);
+      drawBodyText(`Cons:\n${arrayToBulletedText(opt.cons)}`);
+      doc.moveDown(0.5);
     });
     doc.addPage();
 
-    // Final Recommendation
+    // ── Final Recommendation ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Final Recommendation');
     drawSectionHeader('6. Final Recommendation');
-    drawBodyText(`${sanitize(analysis.finalRecommendation.decision)}\n\nJustification: ${sanitize(analysis.finalRecommendation.justification)}\n\nWhy this option: ${sanitize(analysis.finalRecommendation.whyThisOption)}`);
-    drawBodyText(`Partner-level insight: ${sanitize(analysis.finalRecommendation.partnerLevelInsight)}`);
-    drawSectionHeader('Success criteria');
+    drawCard('Decision', sanitize(analysis.finalRecommendation.clearDecision));
+    drawSubHeader('Justification');
+    drawBodyText(sanitize(analysis.finalRecommendation.justification));
+    drawSubHeader('Expected Impact');
+    drawBulletedList(Object.entries(analysis.finalRecommendation.expectedImpact).map(([k, v]) => `${k}: ${v}`));
+    drawSubHeader('Success Criteria');
     drawBulletedList(analysis.finalRecommendation.successCriteria);
-    drawSectionHeader('Trade-offs');
-    analysis.finalRecommendation.tradeOffs.forEach(tradeoff => {
-      drawBodyText(`• ${sanitize(tradeoff.what)} — ${sanitize(tradeoff.why)} (${tradeoff.acceptableRisk ? 'Acceptable' : 'High'} risk)`);
-    });
+    drawSubHeader('Trade-offs');
+    analysis.finalRecommendation.tradeOffs.forEach(t => drawBodyText(`• ${t.what}: ${t.why} (${t.acceptableRisk ? 'Acceptable' : 'High'} risk)`));
     doc.addPage();
 
-    // Execution Plan
+    // ── Execution Plan ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Execution Plan');
     drawSectionHeader('7. Execution Plan');
     [analysis.executionPlan.phase1, analysis.executionPlan.phase2, analysis.executionPlan.phase3].forEach(phase => {
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13).text(`${sanitize(phase.name)} — ${sanitize(phase.duration)}`);
-      drawBodyText(`Milestones:\n${arrayToBulletedText(phase.milestones)}\nDependencies:\n${arrayToBulletedText(phase.dependencies)}\nSuccess metrics:\n${arrayToBulletedText(phase.successMetrics)}`);
+      drawSubHeader(`${sanitize(phase.name)} (${sanitize(phase.duration)})`);
+      phase.actions.forEach(a => drawBodyText(`→ ${a.action}\n   Owner: ${a.owner}  |  Deadline: ${a.deadline}\n   Deliverable: ${a.deliverable}`));
+      doc.moveDown(0.4);
     });
-    drawBodyText(`Critical path: ${sanitize(analysis.executionPlan.criticalPath)}`);
-    drawBodyText(`Dependencies: ${arrayToBulletedText(analysis.executionPlan.dependencies)}`);
+    drawBodyText(`Critical Path: ${sanitize(analysis.executionPlan.criticalPath)}`);
     doc.addPage();
 
-    // KPI Tracking System
+    // ── KPI System ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('KPI Tracking System');
     drawSectionHeader('8. KPI Tracking System');
-    drawBodyText('This KPI system is designed to keep the team accountable to the recommendation and to surface early performance signals.');
-    drawSectionHeader('Leading Indicators');
-    analysis.kpiTrackingSystem.leadingIndicators.forEach(indicator => {
-      drawBodyText(`${sanitize(indicator.name)} — Target: ${sanitize(indicator.target)} | Frequency: ${sanitize(indicator.frequency)} | Linked to: ${sanitize(indicator.linkedToAction)}`);
-    });
-    drawSectionHeader('Lagging Indicators');
-    analysis.kpiTrackingSystem.laggingIndicators.forEach(indicator => {
-      drawBodyText(`${sanitize(indicator.name)} — Target: ${sanitize(indicator.target)} | Frequency: ${sanitize(indicator.frequency)} | Linked to: ${sanitize(indicator.linkedToAction)}`);
-    });
-    drawBodyText(`Dashboard metrics: ${sanitize(analysis.kpiTrackingSystem.dashboardMetrics.join(', '))}`);
+    drawSubHeader('Leading Indicators');
+    analysis.kpiTrackingSystem.leadingIndicators.forEach(k =>
+      drawBodyText(`${k.name}: Target ${k.target} | ${k.frequency} | Linked to: ${k.linkedToAction}`)
+    );
+    drawSubHeader('Lagging Indicators');
+    analysis.kpiTrackingSystem.laggingIndicators.forEach(k =>
+      drawBodyText(`${k.name}: Target ${k.target} | ${k.frequency} | Linked to: ${k.linkedToAction}`)
+    );
     drawBodyText(`Review cadence: ${sanitize(analysis.kpiTrackingSystem.reviewCadence)}`);
     doc.addPage();
 
-    // Risks & Mitigation
+    // ── Risks ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    drawPageHeader('Risks & Mitigation');
     drawSectionHeader('9. Risks & Mitigation');
-    analysis.risksAndMitigation.forEach((risk, index) => {
-      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(12).text(`${index + 1}. ${sanitize(risk.risk)}`);
-      drawBodyText(`Impact: ${sanitize(risk.impact)} | Probability: ${sanitize(risk.probability)}\nMitigation: ${sanitize(risk.mitigationStrategy)}\nContingency: ${sanitize(risk.contingencyPlan)}\nOwner: ${sanitize(risk.owner)}`);
+    analysis.risksAndMitigation.forEach((risk, i) => {
+      drawSubHeader(`${i + 1}. ${sanitize(risk.risk)} [${risk.impact.toUpperCase()} — ${risk.probability}]`);
+      drawBodyText(sanitize(risk.description));
+      drawBodyText(`Mitigation: ${sanitize(risk.mitigationStrategy)}`);
+      drawBodyText(`Contingency: ${sanitize(risk.contingencyPlan)}`);
+      drawBodyText(`Owner: ${sanitize(risk.owner)}`);
     });
     doc.addPage();
 
-    // Thank You Page
-    doc.fillColor('#020617').rect(0, 0, doc.page.width, doc.page.height).fill();
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(28).text('Thank You', {
-      align: 'center',
-    });
+    // ── Closing ──
+    doc.fillColor(DARK_BG).rect(0, 0, doc.page.width, doc.page.height).fill();
+    doc.fillColor(ACCENT).rect(0, 0, 6, doc.page.height).fill();
+    doc.moveDown(5);
+    doc.fillColor(TEXT_PRIMARY).font('Helvetica-Bold').fontSize(28).text('Ready to Execute', { align: 'center' });
     doc.moveDown(1);
-    doc.font('Helvetica').fontSize(12).fillColor('#94a3b8').text('We appreciate the opportunity to deliver this strategic analysis. Use this report to align leadership, drive execution, and track outcomes with confidence.', {
-      align: 'center',
-      width: pageWidth,
-      lineGap: 5,
-    });
+    doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(12).text(
+      'Use this report to align leadership, drive execution, and track outcomes with confidence.',
+      { align: 'center', width: pageWidth, lineGap: 6 }
+    );
     doc.moveDown(2);
-    doc.font('Helvetica-Bold').fontSize(14).fillColor('#38bdf8').text('StrategyOS', { align: 'center' });
-    doc.font('Helvetica').fontSize(11).fillColor('#cbd5e1').text('www.strategyos.ai', { align: 'center' });
+    doc.fillColor(ACCENT).font('Helvetica-Bold').fontSize(14).text('StrategyOS', { align: 'center' });
+    doc.fillColor(TEXT_SECONDARY).font('Helvetica').fontSize(11).text('strategyos.ai', { align: 'center' });
 
     addPageFooter();
     doc.end();
   } catch (error: any) {
     console.error('PDF export error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate PDF report.',
-    });
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate PDF report.' });
   }
 });
 
-/**
- * GET /api/templates
- * Get available consulting templates by firm type
- */
-app.get('/api/templates', (req: Request, res: Response) => {
-  const templates = {
-    mckinsey: {
-      name: 'McKinsey Style',
-      description: 'Hypothesis-driven, structured analysis',
-      components: [
-        'Problem diagnosis',
-        'MECE-based structuring',
-        'Data-intensive deep dive',
-      ],
-    },
-    bcg: {
-      name: 'BCG Growth Focused',
-      description: 'Growth strategy and competitive positioning',
-      components: ['Growth hypothesis', 'Market opportunity', 'Execution roadmap'],
-    },
-    bain: {
-      name: 'Bain Execution Focused',
-      description: 'Implementation excellence and ROI clarity',
-      components: ['Business impact', 'Implementation plan', 'Change management'],
-    },
-    accenture: {
-      name: 'Accenture Tech Transformation',
-      description: 'Technology and digital transformation focus',
-      components: ['Tech assessment', 'Digital roadmap', 'Transformation governance'],
-    },
-  };
-
-  res.json({
-    success: true,
-    templates,
-  });
-});
-
-// Error handling middleware
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+// Error handling
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    requestId: res.locals.requestId,
-  });
+  res.status(500).json({ success: false, error: 'Internal server error', requestId: res.locals.requestId });
 });
 
-// 404 handler
 app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.path,
-  });
+  res.status(404).json({ success: false, error: 'Endpoint not found', path: req.path });
 });
 
-// Start server
 const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
@@ -491,13 +488,8 @@ const server = app.listen(PORT, () => {
   `);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+  server.close(() => process.exit(0));
 });
 
 export default app;

@@ -1,0 +1,44 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id          String        @id @default(cuid())
+  email       String        @unique
+  password    String
+  name        String?
+  analyses    Analysis[]
+  activityLog ActivityLog[]
+  createdAt   DateTime      @default(now())
+}
+
+model Analysis {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id])
+  title        String
+  industry     String
+  companySize  String
+  firmStyle    String
+  problemData  String
+  analysisData String
+  isPublic     Boolean  @default(false)
+  shareToken   String?  @unique
+  createdAt    DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  metadata  String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}

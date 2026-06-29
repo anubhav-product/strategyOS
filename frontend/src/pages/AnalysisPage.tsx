@@ -56,8 +56,8 @@ export default function AnalysisPage() {
           >
             <div className="mb-8 flex justify-between items-center">
               <div>
-                <h1 className="text-4xl font-bold text-white mb-2">Analysis Report</h1>
-                <p className="text-slate-400">
+                <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">Analysis Report</h1>
+                <p className="text-slate-500 dark:text-slate-400">
                   Complete 9-section consulting analysis showing below
                 </p>
               </div>

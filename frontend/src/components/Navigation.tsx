@@ -29,8 +29,8 @@ export default function Navigation({ theme, toggleTheme }: NavigationProps) {
             <span className="text-slate-950 font-bold text-lg">S</span>
           </div>
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">StrategyOS</p>
-            <p className="text-xl font-semibold text-white">Premium Growth AI</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">StrategyOS</p>
+            <p className="text-xl font-semibold text-slate-900 dark:text-white">Premium Growth AI</p>
           </div>
         </Link>
 
@@ -73,34 +73,34 @@ export default function Navigation({ theme, toggleTheme }: NavigationProps) {
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           transition={{ duration: 0.25 }}
-          className="border-t border-slate-700/50 bg-slate-950/95 md:hidden"
+          className="border-t border-slate-200 dark:border-slate-700/50 bg-white/95 dark:bg-slate-950/95 md:hidden"
         >
           <div className="px-6 py-4 space-y-3">
             <Link
               to="/"
               onClick={() => setOpen(false)}
-              className="block text-slate-300 hover:text-white"
+              className="block text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             >
               Home
             </Link>
             <Link
               to="/analysis"
               onClick={() => setOpen(false)}
-              className="block text-slate-300 hover:text-white"
+              className="block text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             >
               Analysis
             </Link>
             <Link
               to="/dashboard"
               onClick={() => setOpen(false)}
-              className="block text-slate-300 hover:text-white"
+              className="block text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             >
               Dashboard
             </Link>
             <Link
               to="/engagement/intro"
               onClick={() => setOpen(false)}
-              className="block text-slate-300 hover:text-white"
+              className="block text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
             >
               Engagement
             </Link>

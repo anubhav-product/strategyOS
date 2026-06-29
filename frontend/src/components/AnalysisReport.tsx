@@ -602,6 +602,13 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
     'Validate risk mitigation and contingency triggers',
   ];
 
+  const executionBenefits = [
+    analysis.finalRecommendation.whyThisOption,
+    `Revenue impact: ${analysis.finalRecommendation.expectedImpact.revenueIncrease ?? 'N/A'}`,
+    `Retention lift: ${analysis.finalRecommendation.expectedImpact.retentionLift ?? 'N/A'}`,
+    `Cost reduction: ${analysis.finalRecommendation.expectedImpact.costReduction ?? 'N/A'}`,
+  ].filter(Boolean) as string[];
+
   const successOutlook = [
     'Convert clarity into measurable growth outcomes',
     'Move from diagnosis to action in a structured, low-risk sequence',
