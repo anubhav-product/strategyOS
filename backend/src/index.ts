@@ -13,7 +13,7 @@ dotenv.config();
 
 const app: Express = express();
 const prisma = new PrismaClient();
-const PORT = process.env.BACKEND_PORT || 3002;
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 3002;
 
 async function logActivity(req: Request, action: string, userId?: string, metadata?: object) {
   try {
@@ -29,7 +29,10 @@ async function logActivity(req: Request, action: string, userId?: string, metada
   } catch { /* non-fatal */ }
 }
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL ? [process.env.FRONTEND_URL, 'http://localhost:3000'] : true,
+  credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
