@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Share2, Check } from 'lucide-react';
+import { Share2, Check, MessageSquare, Download, Presentation, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import type { ConsultingAnalysis } from '@core/types';
+import ChatPanel from '../components/ChatPanel';
 
 interface EngagementData {
   analysisId: string;
@@ -21,6 +22,8 @@ export default function EngagementPage() {
   const [error, setError] = useState('');
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pptxLoading, setPptxLoading] = useState(false);
   const token = localStorage.getItem('strategyos_token');
 
   useEffect(() => {
@@ -78,6 +81,25 @@ export default function EngagementPage() {
     finally { setSharing(false); }
   };
 
+  const downloadPptx = async () => {
+    if (!data) return;
+    setPptxLoading(true);
+    try {
+      const res = await axios.post('/api/export/pptx', {
+        analysis: data.analysis,
+        title: data.problem.title,
+      }, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `StrategyOS-${data.problem.title.replace(/\s+/g, '-').slice(0, 40)}.pptx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('PowerPoint downloaded!');
+    } catch { toast.error('Could not export PowerPoint'); }
+    finally { setPptxLoading(false); }
+  };
+
   return (
     <div className="min-h-[calc(100vh-73px)] py-12 px-6">
       <div className="max-w-6xl mx-auto">
@@ -105,8 +127,20 @@ export default function EngagementPage() {
               }`}>
               {shared ? <><Check size={15} /> Link copied!</> : <><Share2 size={15} /> {sharing ? 'Generating…' : 'Share'}</>}
             </button>
+            <button onClick={downloadPptx} disabled={pptxLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-purple-400 dark:hover:border-purple-500 transition-all disabled:opacity-50">
+              <Download size={15} /> {pptxLoading ? 'Exporting…' : 'Export PPTX'}
+            </button>
+            <button onClick={() => setChatOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:shadow-lg hover:shadow-blue-500/25 transition-all">
+              <MessageSquare size={15} /> Ask AI
+            </button>
           </div>
         </motion.div>
+
+        <AnimatePresence>
+          {chatOpen && id && <ChatPanel analysisId={id} onClose={() => setChatOpen(false)} />}
+        </AnimatePresence>
 
         <div className="grid gap-6 lg:grid-cols-2 mb-8">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}

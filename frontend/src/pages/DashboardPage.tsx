@@ -4,6 +4,7 @@ import { Plus, Search, Zap, TrendingUp, FileText, LogOut } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import UpgradePrompt from '../components/UpgradePrompt';
 
 interface AnalysisSummary {
   id: string;
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const navigate = useNavigate();
   const user = (() => { try { return JSON.parse(localStorage.getItem('strategyos_user') || 'null'); } catch { return null; } })();
   const token = localStorage.getItem('strategyos_token');
@@ -26,7 +28,12 @@ export default function DashboardPage() {
     if (!token) return;
     setLoading(true);
     axios.get('/api/analyses', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => { if (res.data.success) setAnalyses(res.data.analyses); })
+      .then(res => {
+        if (res.data.success) {
+          setAnalyses(res.data.analyses);
+          if (res.data.analyses.length >= 3) setShowUpgrade(true);
+        }
+      })
       .catch(() => toast.error('Could not load analyses'))
       .finally(() => setLoading(false));
   }, [token]);
@@ -94,6 +101,8 @@ export default function DashboardPage() {
             ))}
           </div>
         </motion.div>
+
+        {showUpgrade && <UpgradePrompt trigger="limit" onClose={() => setShowUpgrade(false)} />}
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mb-6 relative">
           <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />

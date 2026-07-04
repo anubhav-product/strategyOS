@@ -1,94 +1,42 @@
-/**
- * Analysis Input Form Component
- * Structured business problem capture
- */
-
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Mic, Zap } from 'lucide-react';
-import axios from 'axios';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown, Sparkles, FlaskConical, Mic, MicOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { BusinessProblem } from '@core/types';
 
-const TEMPLATES: Array<{ label: string; emoji: string; data: Partial<BusinessProblem> }> = [
-  {
-    label: 'SaaS Growth',
-    emoji: '🚀',
-    data: {
-      title: 'Scale ARR from $XM to $YM in 12 months',
-      description: 'We are a B2B SaaS company with strong retention (NRR 110%+) but slow new logo acquisition. We need to identify the fastest path to doubling ARR.',
-      context: 'Series A funded, 15-person team. Selling to mid-market. ACV $30-50k. Sales cycle 30-60 days.',
-      industry: 'B2B SaaS',
-      companySize: 'scale-up',
-      firmStyle: 'mckinsey',
-      timeframe: '12 months',
-    },
-  },
-  {
-    label: 'Market Entry',
-    emoji: '🌍',
-    data: {
-      title: 'Enter the [Country/Region] market',
-      description: 'We want to expand our product into a new geographic market. We need to assess market size, competitive dynamics, go-to-market strategy, and required investment.',
-      context: 'Profitable in home market. Product-market fit proven. Considering geographic expansion.',
-      industry: 'Technology',
-      companySize: 'mid-market',
-      firmStyle: 'bcg',
-      timeframe: '18 months',
-    },
-  },
-  {
-    label: 'Cost Reduction',
-    emoji: '✂️',
-    data: {
-      title: 'Reduce operating costs by 20% without impacting growth',
-      description: 'Rising burn rate is threatening our runway. We need to identify cost reduction opportunities across the business while protecting growth investments.',
-      context: 'Series B startup, 18 months runway. $5M ARR, $800k monthly burn. Team of 40.',
-      industry: 'Technology',
-      companySize: 'startup',
-      firmStyle: 'bain',
-      timeframe: '6 months',
-    },
-  },
-  {
-    label: 'Product Launch',
-    emoji: '🎯',
-    data: {
-      title: 'Launch new product line to enterprise segment',
-      description: 'We have built a new product targeted at enterprise customers. We need a go-to-market strategy covering positioning, pricing, sales motion, and success metrics.',
-      context: 'Currently serve SMB. New product ready for beta. No enterprise sales experience.',
-      industry: 'SaaS',
-      companySize: 'mid-market',
-      firmStyle: 'accenture',
-      timeframe: '9 months',
-    },
-  },
-  {
-    label: 'M&A Due Diligence',
-    emoji: '🤝',
-    data: {
-      title: 'Evaluate acquisition of [Target Company]',
-      description: 'We are considering acquiring a competitor. Need strategic rationale, synergy analysis, integration plan, and risk assessment.',
-      context: 'Acquirer is profitable with strong balance sheet. Target has complementary product and customer base.',
-      industry: 'Technology',
-      companySize: 'enterprise',
-      firmStyle: 'mckinsey',
-      timeframe: '3 months',
-    },
-  },
-  {
-    label: 'Churn Reduction',
-    emoji: '🔒',
-    data: {
-      title: 'Reduce monthly churn from X% to Y%',
-      description: 'Customer churn is eroding growth. We need to diagnose root causes across product, onboarding, support, and pricing — then build a systematic retention program.',
-      context: 'SaaS product, monthly contracts, 200 customers. Churn spiked after recent price increase.',
-      industry: 'B2B SaaS',
-      companySize: 'startup',
-      firmStyle: 'bain',
-      timeframe: '6 months',
-    },
-  },
+const STYLES = [
+  { key: 'mckinsey',  label: 'McKinsey',  hint: 'Structured & hypothesis-driven' },
+  { key: 'bcg',       label: 'BCG',       hint: 'Growth-oriented & bold' },
+  { key: 'bain',      label: 'Bain',      hint: 'Execution-focused & ROI-clear' },
+  { key: 'accenture', label: 'Accenture', hint: 'Tech-led transformation' },
+];
+
+const DEMO_PROBLEM = {
+  description: `We're a B2B SaaS company selling project management software to mid-market teams (50–500 employees). We've grown to $3.2M ARR with strong retention (NRR 112%) but new logo acquisition has stalled — we closed only 8 new customers last quarter vs. 22 the quarter before.
+
+Our ACV is $18k, sales cycle is 45–60 days, and we're selling to Engineering and Product teams. Our top competitors (Asana, Linear) have doubled down on PLG and we've been purely sales-led. We have a 12-person team: 4 in sales, 2 in CS, 3 in eng, 2 in product, 1 in marketing.
+
+The CEO wants to hit $6M ARR in 12 months. We have 14 months of runway at current burn ($220k/month). What's the fastest path to growth without killing unit economics?`,
+  firmStyle: 'mckinsey',
+};
+
+const EXAMPLES = [
+  'We\'re a B2B SaaS at $3.2M ARR. New logo growth has stalled — 8 closes last quarter vs. 22 the prior quarter. How do we hit $6M ARR in 12 months?',
+  'Our monthly churn spiked from 2% to 7% after raising prices. 200 customers, 18 months runway. What do we fix first?',
+  'We\'re profitable in India ($2M revenue) and want to enter the US market. No US team yet. What\'s the GTM strategy?',
+  'We need to cut burn by 30% without destroying growth. Series B SaaS, $8M ARR, $900k monthly burn.',
+];
+
+const LOADING_STEPS = [
+  'Diagnosing the problem…',
+  'Structuring the analysis…',
+  'Running deep dive…',
+  'Finding root causes…',
+  'Building strategic options…',
+  'Formulating recommendation…',
+  'Writing execution plan…',
+  'Designing KPI system…',
+  'Assessing risks…',
 ];
 
 interface AnalysisResponse {
@@ -100,383 +48,266 @@ interface AnalysisResponse {
 interface AnalysisFormProps {
   onSubmit?: (response: AnalysisResponse) => void;
   initialDescription?: string;
+  compact?: boolean;
 }
 
-export default function AnalysisForm({ onSubmit, initialDescription }: AnalysisFormProps) {
+export default function AnalysisForm({ onSubmit, initialDescription, compact }: AnalysisFormProps) {
+  const [description, setDescription] = useState(initialDescription || '');
+  const [firmStyle, setFirmStyle] = useState('mckinsey');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [industry, setIndustry] = useState('');
+  const [companySize, setCompanySize] = useState('mid-market');
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
-  const LOADING_STEPS = [
-    'Diagnosing problem...',
-    'Structuring analysis...',
-    'Running deep dive...',
-    'Identifying root causes...',
-    'Generating strategic options...',
-    'Formulating recommendation...',
-    'Building execution plan...',
-    'Designing KPI system...',
-    'Assessing risks...',
-  ];
-  const [formData, setFormData] = useState<BusinessProblem>({
-    title: '',
-    description: '',
-    context: '',
-    industry: '',
-    companySize: 'mid-market',
-    firmStyle: 'mckinsey',
-    reportTemplate: 'conversion-led',
-    timeframe: '12 months',
-  });
-  const [speechRecognition, setSpeechRecognition] = useState<any>(null);
-  const [recognitionInstance, setRecognitionInstance] = useState<any>(null);
-  const [voiceStatus, setVoiceStatus] = useState<'idle' | 'listening' | 'finished' | 'unsupported'>('idle');
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const voiceTranscriptRef = React.useRef('');
+  const [streamPreview, setStreamPreview] = useState('');
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (initialDescription) setDescription(initialDescription);
+  }, [initialDescription]);
 
-    if (recognition) {
-      setSpeechRecognition(() => recognition);
-    } else {
-      setVoiceStatus('unsupported');
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (recognitionInstance && recognitionInstance.stop) {
-        recognitionInstance.stop();
-      }
-    };
-  }, [recognitionInstance]);
-
-  useEffect(() => {
-    if (initialDescription && !formData.description) {
-      setFormData(prev => ({ ...prev, description: initialDescription }));
-    }
-  }, [initialDescription, formData.description]);
-
-  const startVoiceCapture = () => {
-    if (!speechRecognition) {
-      setVoiceStatus('unsupported');
+  const toggleVoice = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { toast.error('Voice not supported in this browser'); return; }
+    if (listening) {
+      recognitionRef.current?.stop();
       return;
     }
-
-    if (voiceStatus === 'listening' && recognitionInstance) {
-      recognitionInstance.stop();
-      return;
-    }
-
-    const recognition = new speechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setVoiceStatus('listening');
-      setRecognitionInstance(recognition);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event);
-      setVoiceStatus('idle');
-      setRecognitionInstance(null);
-    };
-
-    recognition.onend = () => {
-      setRecognitionInstance(null);
-      setVoiceStatus(voiceTranscriptRef.current.trim() ? 'finished' : 'idle');
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((result: any) => result[0].transcript)
+    const r = new SR();
+    r.lang = 'en-US';
+    r.continuous = true;
+    r.interimResults = false;
+    r.onstart = () => setListening(true);
+    r.onend = () => setListening(false);
+    r.onerror = () => setListening(false);
+    r.onresult = (e: any) => {
+      const transcript = Array.from(e.results)
+        .slice(e.resultIndex)
+        .map((res: any) => res[0].transcript)
         .join(' ');
-      voiceTranscriptRef.current = transcript;
-      setVoiceTranscript(transcript);
+      setDescription(prev => prev ? `${prev} ${transcript}` : transcript);
     };
-
-    recognition.onspeechend = () => {
-      recognition.stop();
-    };
-
-    recognition.start();
+    r.start();
+    recognitionRef.current = r;
   };
 
-  const useVoiceTranscript = () => {
-    if (!voiceTranscript.trim()) return;
-    setFormData(prev => ({ ...prev, description: voiceTranscript.trim() }));
-    setVoiceStatus('idle');
-    toast.success('Voice transcript saved to problem description.');
-  };
-
-  const clearVoiceTranscript = () => {
-    voiceTranscriptRef.current = '';
-    setVoiceTranscript('');
-    setVoiceStatus('idle');
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [description]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!description.trim()) { toast.error('Describe your business problem first'); return; }
 
-    if (!formData.title || !formData.description) {
-      toast.error('Please fill in required fields');
-      return;
-    }
+    // Auto-generate title from first sentence
+    const title = description.split(/[.!?\n]/)[0].slice(0, 100) || 'Business Strategy Analysis';
+
+    const problem: BusinessProblem = {
+      title,
+      description,
+      context: '',
+      industry: industry || 'General',
+      companySize: companySize as any,
+      firmStyle: firmStyle as any,
+      reportTemplate: 'conversion-led',
+      timeframe: '12 months',
+    };
 
     setLoading(true);
     setLoadingStep(0);
-    const stepInterval = setInterval(() => {
-      setLoadingStep(prev => (prev + 1) % LOADING_STEPS.length);
+    setStreamPreview('');
+
+    const stepTimer = setInterval(() => {
+      setLoadingStep(p => (p + 1) % LOADING_STEPS.length);
     }, 7000);
 
     try {
-      const apiBaseUrl = (import.meta.env.VITE_API_URL || '').trim();
-      const endpoint = apiBaseUrl ? `${apiBaseUrl}/api/analysis/generate` : '/api/analysis/generate';
       const token = localStorage.getItem('strategyos_token');
-      const response = await axios.post(endpoint, formData, {
-        timeout: 120000,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const apiBase = (import.meta.env.VITE_API_URL || '').trim();
+      const endpoint = `${apiBase}/api/analysis/stream`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(problem),
       });
 
-      if (response.data.success) {
-        toast.success('Analysis generated successfully!');
-        onSubmit?.({
-          analysisId: response.data.analysisId,
-          analysis: response.data.analysis,
-          generatedAt: response.data.generatedAt,
-        });
+      if (!res.body) throw new Error('No stream');
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.text) setStreamPreview(p => p + data.text);
+            if (data.analysis) {
+              clearInterval(stepTimer);
+              setLoading(false);
+              setStreamPreview('');
+              toast.success('Analysis ready!');
+              onSubmit?.({ analysisId: data.analysisId, analysis: data.analysis, generatedAt: data.generatedAt });
+              return;
+            }
+            if (data.message && !data.text) throw new Error(data.message);
+          } catch (err: any) {
+            if (err.message?.includes('Failed') || err.message?.includes('Could not')) throw err;
+          }
+        }
       }
-    } catch (error: any) {
-      console.error('Analysis error:', error);
-      toast.error(error.response?.data?.error || 'Failed to generate analysis');
+    } catch (err: any) {
+      toast.error(err.message || 'Something went wrong — try again');
     } finally {
-      clearInterval(stepInterval);
+      clearInterval(stepTimer);
       setLoading(false);
-      setLoadingStep(0);
+      setStreamPreview('');
     }
   };
 
   return (
-    <motion.form
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      onSubmit={handleSubmit}
-      className="glass-card p-8 space-y-6"
-    >
-      {/* Template picker */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Zap size={15} className="text-blue-500 dark:text-cyan-400" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Start from a template</span>
-          <span className="text-xs text-slate-400 ml-1">— or fill in your own below</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {TEMPLATES.map(t => (
-            <button key={t.label} type="button"
-              onClick={() => setFormData(prev => ({ ...prev, ...t.data }))}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150
-                border-slate-200 bg-white text-slate-700 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50
-                dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:border-cyan-500 dark:hover:text-cyan-400 dark:hover:bg-cyan-500/8">
-              <span>{t.emoji}</span> {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <motion.form onSubmit={handleSubmit} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      className="w-full space-y-4">
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Problem Title */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Problem Title *
-          </label>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="e.g., Accelerating Revenue Growth in Enterprise Segment"
-            className="field"
-          />
-        </div>
-
-        {/* Industry */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Industry
-          </label>
-          <input
-            type="text"
-            name="industry"
-            value={formData.industry}
-            onChange={handleChange}
-            placeholder="e.g., SaaS, FinTech, Healthcare"
-            className="field"
-          />
-        </div>
-
-        {/* Company Size */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Company Size
-          </label>
-          <select
-            name="companySize"
-            value={formData.companySize}
-            onChange={handleChange}
-            className="field"
-          >
-            <option value="startup">Startup</option>
-            <option value="scale-up">Scale-up</option>
-            <option value="mid-market">Mid-market</option>
-            <option value="enterprise">Enterprise</option>
-          </select>
-        </div>
-
-        {/* Consulting Firm Style */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Consulting Approach
-          </label>
-          <select
-            name="firmStyle"
-            value={formData.firmStyle}
-            onChange={handleChange}
-            className="field"
-          >
-            <option value="mckinsey">McKinsey — structured problem-solving and MECE clarity</option>
-            <option value="bcg">BCG — growth-oriented options and opportunity mapping</option>
-            <option value="bain">Bain — execution bias with real-world implementation focus</option>
-            <option value="accenture">Accenture — tech-enabled transformation and scaling</option>
-          </select>
-          <p className="mt-3 text-sm text-slate-400">
-            Choose the style that matches your preference. Every approach works for any problem; this simply adjusts how the report frames the recommendation.
-          </p>
-        </div>
-
-        {/* Report Template */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-            Report Template
-          </label>
-          <select
-            name="reportTemplate"
-            value={formData.reportTemplate}
-            onChange={handleChange}
-            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-950 dark:text-white focus:outline-none focus:border-cyan-500 transition-colors"
-          >
-            <option value="conversion-led">Conversion-Led Executive Brief</option>
-            <option value="growth-strategy">Growth Strategy Blueprint</option>
-            <option value="execution-excellence">Execution Excellence Playbook</option>
-            <option value="tech-enabled">Tech-Enabled Transformation Plan</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Problem Description */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
-          <Mic size={16} className="text-cyan-500 dark:text-cyan-400" />
-          Detailed Problem Description *
-        </label>
-        <p className="text-xs text-slate-500 dark:text-slate-500 mb-3">Type your challenge or use voice input below — both work together.</p>
-        <textarea
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          placeholder="Describe the business challenge, current situation, and what you want to achieve..."
-          rows={5}
-          className="field resize-none"
-        />
-        <div className="mt-4 rounded-3xl glass-sm p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Voice input</p>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">Optional: speak your problem instead of typing.</p>
-            </div>
-            <button
-              type="button"
-              onClick={startVoiceCapture}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-800 dark:text-white border border-cyan-500/20 hover:bg-cyan-500/10 transition-colors"
-            >
-              {voiceStatus === 'listening' ? 'Stop voice input' : 'Start voice input'}
-            </button>
+      {/* Demo shortcut */}
+      {!description && !loading && (
+        <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          onClick={() => { setDescription(DEMO_PROBLEM.description); setFirmStyle(DEMO_PROBLEM.firmStyle); }}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed border-blue-300 dark:border-cyan-500/40 bg-blue-50/50 dark:bg-cyan-500/5 text-left hover:border-blue-400 dark:hover:border-cyan-500/70 hover:bg-blue-50 dark:hover:bg-cyan-500/10 transition-all group">
+          <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-cyan-500/15 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 dark:group-hover:bg-cyan-500/25 transition-colors">
+            <FlaskConical size={15} className="text-blue-600 dark:text-cyan-400" />
           </div>
+          <div>
+            <p className="text-sm font-semibold text-blue-700 dark:text-cyan-300">Try a demo problem</p>
+            <p className="text-xs text-blue-500/70 dark:text-cyan-500/60 mt-0.5">SaaS growth stall — $3.2M ARR, 8 new logos last quarter vs. 22 the prior. McKinsey analysis.</p>
+          </div>
+          <span className="ml-auto text-xs text-blue-400 dark:text-cyan-500/60 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors flex-shrink-0">Fill form →</span>
+        </motion.button>
+      )}
 
-          <div className="mt-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4">
-            <p className="text-xs uppercase tracking-[0.35em] text-slate-400 mb-3">Voice transcript preview</p>
-            <p className="min-h-[3rem] text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-              {voiceStatus === 'unsupported'
-                ? 'Voice input is not supported in this browser.'
-                : voiceStatus === 'listening'
-                ? voiceTranscript || 'Listening... speak now and the text will appear live.'
-                : voiceTranscript
-                ? voiceTranscript
-                : 'No voice input captured yet. Click the button to begin speaking.'}
-            </p>
-            {voiceTranscript && (
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={useVoiceTranscript}
-                  className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-400 transition-colors"
-                >
-                  Use transcript
-                </button>
-                <button
-                  type="button"
-                  onClick={clearVoiceTranscript}
-                  className="rounded-full border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:border-slate-400 transition-colors"
-                >
-                  Clear transcript
-                </button>
+      {/* Main textarea */}
+      <div className="relative rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shadow-lg shadow-slate-200/40 dark:shadow-slate-900/40 focus-within:border-blue-400 dark:focus-within:border-cyan-500 transition-colors">
+        <textarea
+          ref={textareaRef}
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Describe your business problem… e.g. 'We're a SaaS company with 8% monthly churn. We raised $5M and need to fix retention before Series B.'"
+          rows={compact ? 4 : 5}
+          className="w-full bg-transparent px-5 pt-5 pb-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-base leading-relaxed resize-none focus:outline-none"
+        />
+
+        {/* Mic button */}
+        <button type="button" onClick={toggleVoice}
+          title={listening ? 'Stop recording' : 'Speak your problem'}
+          className={`absolute right-4 top-4 p-2 rounded-xl transition-all ${
+            listening
+              ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}>
+          {listening ? <MicOff size={16} /> : <Mic size={16} />}
+        </button>
+
+        {/* Quick example chips */}
+        {!description && !loading && (
+          <div className="px-5 pb-4 flex flex-wrap gap-2">
+            <p className="w-full text-xs text-slate-400 dark:text-slate-500 mb-0.5">Or try one of these:</p>
+            {EXAMPLES.slice(0, 3).map((ex, i) => (
+              <button key={i} type="button" onClick={() => setDescription(ex)}
+                className="text-xs px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 hover:bg-blue-50 dark:hover:bg-cyan-500/10 transition-colors text-left">
+                {ex.slice(0, 60)}…
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Live stream preview inside the card */}
+        <AnimatePresence>
+          {loading && streamPreview && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="mx-4 mb-4 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">AI generating…</span>
               </div>
-            )}
-          </div>
-        </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono leading-relaxed line-clamp-3">
+                {streamPreview.slice(-400)}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Business Context */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-          Business Context & Background
-        </label>
-        <textarea
-          name="context"
-          value={formData.context}
-          onChange={handleChange}
-          placeholder="Company background, market position, recent changes, constraints..."
-          rows={4}
-          className="field resize-none"
-        />
+      {/* Style selector */}
+      <div className="flex gap-2 flex-wrap">
+        {STYLES.map(s => (
+          <button key={s.key} type="button" onClick={() => setFirmStyle(s.key)}
+            title={s.hint}
+            className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+              firmStyle === s.key
+                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-cyan-500 dark:bg-cyan-500/10 dark:text-cyan-300'
+                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900/50'
+            }`}>
+            {s.label}
+          </button>
+        ))}
+        <button type="button" onClick={() => setShowAdvanced(v => !v)}
+          className="ml-auto flex items-center gap-1 px-3 py-2 rounded-xl text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+          More options
+          <ChevronDown size={13} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {/* Submit Button */}
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        disabled={loading}
-        type="submit"
-        className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
+      {/* Advanced options (collapsed by default) */}
+      <AnimatePresence>
+        {showAdvanced && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden">
+            <div className="flex gap-3 pt-1">
+              <input value={industry} onChange={e => setIndustry(e.target.value)}
+                placeholder="Industry (e.g. SaaS, FinTech)"
+                className="field flex-1 text-sm py-2.5" />
+              <select value={companySize} onChange={e => setCompanySize(e.target.value)} className="field text-sm py-2.5">
+                <option value="startup">Startup</option>
+                <option value="scale-up">Scale-up</option>
+                <option value="mid-market">Mid-market</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Submit */}
+      <motion.button type="submit" disabled={loading || !description.trim()}
+        whileHover={{ scale: loading ? 1 : 1.01 }}
+        whileTap={{ scale: loading ? 1 : 0.98 }}
+        className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-200 flex items-center justify-center gap-3">
         {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          <>
+            <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             {LOADING_STEPS[loadingStep]}
-          </span>
+          </>
         ) : (
-          'Generate Consulting Analysis'
+          <>
+            <Sparkles size={18} />
+            Generate Analysis
+          </>
         )}
       </motion.button>
     </motion.form>

@@ -1,13 +1,9 @@
-/**
- * Analysis Page
- * Input form and result display
- */
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import AnalysisForm from '../components/AnalysisForm';
 import AnalysisReport from '../components/AnalysisReport';
+import OnboardingModal from '../components/OnboardingModal';
 import type { ConsultingAnalysis } from '@core/types';
 
 interface AnalysisResponse {
@@ -19,63 +15,53 @@ interface AnalysisResponse {
 export default function AnalysisPage() {
   const location = useLocation();
   const initialDescription = (location.state as { initialDescription?: string } | null)?.initialDescription ?? '';
-  const [analysisResponse, setAnalysisResponse] = useState<AnalysisResponse | null>(null);
-  const [showForm, setShowForm] = useState(true);
+  const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const handleAnalysisGenerated = (response: AnalysisResponse) => {
-    setAnalysisResponse(response);
-    setShowForm(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleStartNew = () => {
-    setAnalysisResponse(null);
-    setShowForm(true);
-  };
+  useEffect(() => {
+    const token = localStorage.getItem('strategyos_token');
+    const onboarded = localStorage.getItem('strategyos_onboarded');
+    if (token && !onboarded) setShowOnboarding(true);
+  }, []);
 
   return (
     <div className="min-h-[calc(100vh-73px)] py-12 px-6">
-      <div className="max-w-6xl mx-auto">
-        {showForm && !analysisResponse ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <h1 className="text-4xl font-bold text-slate-950 dark:text-white mb-4">New Consulting Analysis</h1>
-            <p className="text-slate-600 dark:text-slate-400 mb-8">
-              Describe your business challenge and receive an enterprise-grade consulting analysis
-              in minutes.
-            </p>
-            <AnalysisForm onSubmit={handleAnalysisGenerated} initialDescription={initialDescription} />
-          </motion.div>
-        ) : analysisResponse ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            key="report"
-          >
-            <div className="mb-8 flex justify-between items-center">
-              <div>
-                <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">Analysis Report</h1>
-                <p className="text-slate-500 dark:text-slate-400">
-                  Complete 9-section consulting analysis showing below
-                </p>
-              </div>
-              <button
-                onClick={handleStartNew}
-                className="px-6 py-3 bg-slate-100 text-slate-950 rounded-lg border border-slate-300 hover:bg-slate-200 transition-all dark:bg-slate-700 dark:text-white dark:border-slate-600 dark:hover:bg-slate-600"
-              >
-                New Analysis
-              </button>
-            </div>
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
 
+      <div className="max-w-6xl mx-auto">
+        {result ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Analysis Ready</h1>
+                <p className="text-slate-500 dark:text-slate-400 mt-1">Full 9-section consulting report below</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setResult(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                  ← New analysis
+                </button>
+                <Link to="/dashboard"
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium hover:opacity-90 transition-opacity">
+                  Dashboard →
+                </Link>
+              </div>
+            </div>
             <AnalysisReport
-              analysis={analysisResponse.analysis}
-              analysisId={analysisResponse.analysisId}
-              generatedAt={analysisResponse.generatedAt}
+              analysis={result.analysis}
+              analysisId={result.analysisId}
+              generatedAt={result.generatedAt}
             />
           </motion.div>
-        ) : null}
+        ) : (
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto">
+            <div className="mb-8 text-center">
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">New Analysis</h1>
+              <p className="text-slate-500 dark:text-slate-400">Describe your business problem and get a complete consulting report.</p>
+            </div>
+            <AnalysisForm onSubmit={setResult} initialDescription={initialDescription} />
+          </motion.div>
+        )}
       </div>
     </div>
   );

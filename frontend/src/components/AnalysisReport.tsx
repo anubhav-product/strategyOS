@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { ChevronDown, ChevronUp, TrendingUp, AlertTriangle, Target, Zap, ShieldCheck, ClipboardList, Sparkles, BookOpen } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp, AlertTriangle, Target, Zap, ShieldCheck, ClipboardList, Sparkles, BookOpen, RefreshCw } from 'lucide-react';
 import type { ConsultingAnalysis, KPITrackingSystem, ProblemStructuring, RiskMitigation, StrategicOption, ExecutionPlan, FinalRecommendation } from '@core/types';
 
 const containerVariants = {
@@ -369,8 +369,44 @@ function renderStrategicOptions(options: StrategicOption[]) {
   );
 }
 
-function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportProps) {
+function AnalysisReport({ analysis: initialAnalysis, analysisId, generatedAt }: AnalysisReportProps) {
   const [downloading, setDownloading] = React.useState(false);
+  const [analysis, setAnalysis] = React.useState(initialAnalysis);
+  const [regenerating, setRegenerating] = React.useState<string | null>(null);
+
+  const regenerateSection = async (section: string) => {
+    const token = localStorage.getItem('strategyos_token');
+    if (!analysisId || !token) {
+      toast.error('Sign in and save an analysis to regenerate sections');
+      return;
+    }
+    setRegenerating(section);
+    try {
+      const res = await axios.post(`/api/analyses/${analysisId}/regenerate-section`, { section }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data.success) {
+        setAnalysis(prev => ({ ...prev, [section]: res.data.data }));
+        toast.success('Section regenerated!');
+      }
+    } catch { toast.error('Could not regenerate section'); }
+    finally { setRegenerating(null); }
+  };
+
+  const RegenerateBtn = ({ section }: { section: string }) => {
+    if (!analysisId) return null;
+    return (
+      <button onClick={() => regenerateSection(section)} disabled={regenerating === section}
+        title={`Regenerate ${section}`}
+        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-400 hover:border-cyan-500 hover:text-cyan-400 transition-all disabled:opacity-50">
+        {regenerating === section ? (
+          <><span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> Regenerating...</>
+        ) : (
+          <><RefreshCw size={11} /> Regenerate</>
+        )}
+      </button>
+    );
+  };
 
   const executiveSummary = [
     {
@@ -617,6 +653,8 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
 
   const executionTimelineData = executionBarData;
 
+  const [pptxLoading, setPptxLoading] = React.useState(false);
+
   const downloadAnalysisReport = async () => {
     try {
       setDownloading(true);
@@ -624,39 +662,72 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `StrategyOS-Consulting-Report-${analysisId ?? 'report'}.pdf`;
+      link.download = `StrategyOS-Report-${analysisId ?? 'report'}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (error: any) {
-      console.error('PDF export error:', error);
-      toast.error('Unable to download the PDF report.');
+      toast.success('PDF downloaded!');
+    } catch {
+      toast.error('Unable to download PDF.');
     } finally {
       setDownloading(false);
     }
   };
 
+  const downloadPptx = async () => {
+    setPptxLoading(true);
+    try {
+      const res = await axios.post('/api/export/pptx', { analysis, title: analysis.finalRecommendation.clearDecision }, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `StrategyOS-${(analysis.finalRecommendation.clearDecision || 'Report').replace(/\s+/g, '-').slice(0, 40)}.pptx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('PowerPoint downloaded!');
+    } catch {
+      toast.error('Could not export PowerPoint.');
+    } finally {
+      setPptxLoading(false);
+    }
+  };
+
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-6">
-      <motion.div variants={itemVariants} className="rounded-[2rem] border border-slate-800/70 bg-slate-950/80 p-10 shadow-[0_30px_80px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-sm uppercase tracking-[0.35em] text-cyan-300">StrategyOS Executive Report</p>
-            <h1 className="mt-4 text-4xl md:text-5xl font-bold text-white">Partner-level consulting analysis</h1>
-            <p className="mt-4 text-slate-400 leading-relaxed text-lg">
-              A polished, board-ready report designed to translate insights into decisions, options, execution, KPI tracking, and risk management for leadership.
+      {/* Report header with export actions */}
+      <motion.div variants={itemVariants} className="rounded-[2rem] border border-slate-800/70 bg-gradient-to-br from-slate-950 to-slate-900/90 p-8 md:p-10 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-400">StrategyOS · Executive Report</p>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight">
+              {analysis.finalRecommendation.clearDecision || 'Partner-level consulting analysis'}
+            </h1>
+            <p className="mt-3 text-slate-400 leading-relaxed">
+              {analysis.problemDiagnosis.restatedProblem}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Generated {generatedAt ? new Date(generatedAt).toLocaleString() : 'just now'}
+              {analysisId ? ` · ID: ${analysisId.slice(0, 8)}` : ''}
             </p>
           </div>
-          <div className="grid gap-4 text-right">
-            <div className="rounded-3xl border border-slate-800/90 bg-slate-900/80 p-5">
-              <p className="text-slate-500 uppercase tracking-[0.18em] text-xs">Report ID</p>
-              <p className="mt-2 text-white font-semibold">{analysisId || 'N/A'}</p>
-            </div>
-            <div className="rounded-3xl border border-slate-800/90 bg-slate-900/80 p-5">
-              <p className="text-slate-500 uppercase tracking-[0.18em] text-xs">Generated</p>
-              <p className="mt-2 text-white font-semibold">{generatedAt ? new Date(generatedAt).toLocaleString() : new Date().toLocaleString()}</p>
-            </div>
+          {/* Export buttons */}
+          <div className="flex flex-row lg:flex-col gap-3 flex-shrink-0">
+            <button onClick={downloadAnalysisReport} disabled={downloading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white hover:border-slate-600 transition-all text-sm font-medium disabled:opacity-50 whitespace-nowrap">
+              {downloading
+                ? <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Exporting…</>
+                : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Download PDF</>}
+            </button>
+            <button onClick={downloadPptx} disabled={pptxLoading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600/80 to-blue-600/80 border border-purple-500/30 text-white hover:from-purple-600 hover:to-blue-600 hover:shadow-lg hover:shadow-purple-500/20 transition-all text-sm font-medium disabled:opacity-50 whitespace-nowrap">
+              {pptxLoading
+                ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Exporting…</>
+                : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg> Export PPTX</>}
+            </button>
           </div>
         </div>
       </motion.div>
@@ -888,7 +959,7 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
       </motion.section>
 
       <motion.section variants={itemVariants} className="space-y-4" id="root-cause">
-        <SectionHeader title="4. Root Cause Analysis" subtitle="Core issues and evidence" />
+        <div className="flex items-center"><SectionHeader title="4. Root Cause Analysis" subtitle="Core issues and evidence" /><RegenerateBtn section="rootCauseAnalysis" /></div>
         <ValueCard label="Core issue" value={analysis.rootCauseAnalysis.coreIssue} />
         <div className="space-y-4">
           {analysis.rootCauseAnalysis.causes.map((cause, index) => (
@@ -903,12 +974,12 @@ function AnalysisReport({ analysis, analysisId, generatedAt }: AnalysisReportPro
       </motion.section>
 
       <motion.section variants={itemVariants} className="space-y-4" id="strategic-options">
-        <SectionHeader title="5. Strategic Options" subtitle="High-level strategic choices" />
+        <div className="flex items-center"><SectionHeader title="5. Strategic Options" subtitle="High-level strategic choices" /><RegenerateBtn section="strategicOptions" /></div>
         {renderStrategicOptions(analysis.strategicOptions)}
       </motion.section>
 
       <motion.section variants={itemVariants} className="space-y-4" id="final-recommendation">
-        <SectionHeader title="6. Final Recommendation" subtitle="Recommended path and expected impact" />
+        <div className="flex items-center"><SectionHeader title="6. Final Recommendation" subtitle="Recommended path and expected impact" /><RegenerateBtn section="finalRecommendation" /></div>
         <div className="grid gap-4 lg:grid-cols-2">
           <ValueCard label="Recommendation" value={analysis.finalRecommendation.decision} />
           <ValueCard label="Expected impact" value={Object.entries(analysis.finalRecommendation.expectedImpact)

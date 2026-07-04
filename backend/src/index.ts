@@ -162,6 +162,277 @@ app.get('/api/s/:token', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/analysis/stream — streaming SSE analysis
+app.post('/api/analysis/stream', optionalAuth, async (req: AuthRequest, res: Response) => {
+  const problem: BusinessProblem = req.body;
+  if (!problem.title || !problem.description) {
+    return res.status(400).json({ success: false, error: 'Missing required fields' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (event: string, data: object) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const engine = new ConsultingEngine(problem);
+    send('status', { message: 'Connecting to AI engine...' });
+
+    let fullText = '';
+    const stream = await engine.streamAnalysis((chunk: string) => {
+      fullText += chunk;
+      send('chunk', { text: chunk });
+    });
+
+    const analysis = stream;
+    const analysisId = uuidv4();
+
+    if (req.user?.userId) {
+      await prisma.analysis.create({
+        data: {
+          id: analysisId,
+          userId: req.user.userId,
+          title: problem.title,
+          industry: problem.industry || '',
+          companySize: problem.companySize,
+          firmStyle: problem.firmStyle,
+          problemData: JSON.stringify(problem),
+          analysisData: JSON.stringify(analysis),
+        },
+      });
+    }
+
+    logActivity(req, 'analysis_streamed', req.user?.userId, { title: problem.title });
+    send('done', { analysisId, analysis, generatedAt: new Date().toISOString() });
+    res.end();
+  } catch (error: any) {
+    send('error', { message: error.message || 'Failed to generate analysis' });
+    res.end();
+  }
+});
+
+// POST /api/analyses/:id/chat — AI follow-up chat on an analysis
+app.post('/api/analyses/:id/chat', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { message, history = [] } = req.body as { message: string; history: Array<{role: string; content: string}> };
+    const record = await prisma.analysis.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId },
+    });
+    if (!record) return res.status(404).json({ success: false, error: 'Analysis not found' });
+
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const analysis = JSON.parse(record.analysisData);
+    const systemPrompt = `You are a senior consulting partner discussing a specific analysis with the client.
+
+ANALYSIS CONTEXT:
+Title: ${record.title}
+Industry: ${record.industry}
+Final Recommendation: ${analysis.finalRecommendation?.clearDecision || ''}
+Core Issue: ${analysis.rootCauseAnalysis?.coreIssue || ''}
+Strategic Options: ${JSON.stringify(analysis.strategicOptions?.map((o: any) => o.name) || [])}
+
+Answer questions about this specific analysis concisely and with consulting-grade precision. Be specific, use numbers, be direct.`;
+
+    const messages = [
+      ...history.map((h: any) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+      { role: 'user' as const, content: message },
+    ];
+
+    const response = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages,
+    });
+
+    const reply = response.content[0].type === 'text' ? response.content[0].text : '';
+    res.json({ success: true, reply });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/analyses/:id/regenerate-section — redo one section
+app.post('/api/analyses/:id/regenerate-section', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { section, feedback } = req.body as { section: string; feedback?: string };
+    const record = await prisma.analysis.findFirst({
+      where: { id: req.params.id, userId: req.user!.userId },
+    });
+    if (!record) return res.status(404).json({ success: false, error: 'Analysis not found' });
+
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const analysis = JSON.parse(record.analysisData);
+    const problem = JSON.parse(record.problemData);
+
+    const prompt = `You are a senior consulting partner. Regenerate ONLY the "${section}" section of this analysis.
+${feedback ? `User feedback: ${feedback}` : 'Make it more specific, actionable, and insightful.'}
+
+Original problem: ${problem.description}
+Industry: ${problem.industry}, Size: ${problem.companySize}, Style: ${problem.firmStyle}
+
+Current section: ${JSON.stringify(analysis[section])}
+
+Return ONLY valid JSON for the "${section}" key — no explanation, no wrapper object, just the section value.`;
+
+    const response = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (!jsonMatch) return res.status(500).json({ success: false, error: 'Could not regenerate section' });
+
+    const newSection = JSON.parse(jsonMatch[0]);
+    analysis[section] = newSection;
+
+    await prisma.analysis.update({
+      where: { id: record.id },
+      data: { analysisData: JSON.stringify(analysis) },
+    });
+
+    res.json({ success: true, section, data: newSection });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/analyses/search — full-text search
+app.get('/api/analyses/search', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const q = (req.query.q as string || '').trim().toLowerCase();
+    if (!q) return res.json({ success: true, results: [] });
+
+    const all = await prisma.analysis.findMany({
+      where: { userId: req.user!.userId },
+      select: { id: true, title: true, industry: true, companySize: true, firmStyle: true, problemData: true, analysisData: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const results = all
+      .filter(a => {
+        const searchable = [a.title, a.industry, a.problemData, a.analysisData].join(' ').toLowerCase();
+        return searchable.includes(q);
+      })
+      .map(a => ({ id: a.id, title: a.title, industry: a.industry, companySize: a.companySize, firmStyle: a.firmStyle, createdAt: a.createdAt }));
+
+    res.json({ success: true, results, query: q });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/export/pptx — PowerPoint export
+app.post('/api/export/pptx', async (req: Request, res: Response) => {
+  try {
+    const { analysis, title } = req.body as { analysis: ConsultingAnalysis; title?: string };
+    if (!analysis) return res.status(400).json({ success: false, error: 'Missing analysis' });
+
+    const pptxgen = (await import('pptxgenjs')).default;
+    const prs = new pptxgen();
+    prs.layout = 'LAYOUT_WIDE';
+    prs.author = 'StrategyOS';
+    prs.subject = title || 'Consulting Analysis';
+
+    const DARK = '0f172a', ACCENT = '0ea5e9', WHITE = 'ffffff', LIGHT = 'e2e8f0', MUTED = '94a3b8';
+
+    const addSlide = (heading: string, body: string | string[], isTitle = false) => {
+      const slide = prs.addSlide();
+      slide.background = { color: DARK };
+
+      if (isTitle) {
+        slide.addText('STRATEGYOS', { x: 0.5, y: 0.8, w: '90%', fontSize: 11, color: ACCENT, bold: true, charSpacing: 8 });
+        slide.addText(heading, { x: 0.5, y: 1.4, w: '90%', fontSize: 36, color: WHITE, bold: true });
+        slide.addShape(prs.ShapeType.rect, { x: 0.5, y: 3.2, w: 2, h: 0.06, fill: { color: ACCENT } });
+        if (typeof body === 'string') slide.addText(body, { x: 0.5, y: 3.5, w: '90%', fontSize: 16, color: LIGHT });
+        return;
+      }
+
+      slide.addShape(prs.ShapeType.rect, { x: 0, y: 0, w: '100%', h: 0.9, fill: { color: '1e293b' } });
+      slide.addText(heading.toUpperCase(), { x: 0.5, y: 0.22, w: '90%', fontSize: 13, color: ACCENT, bold: true, charSpacing: 4 });
+      slide.addShape(prs.ShapeType.rect, { x: 0.5, y: 0.88, w: 1.5, h: 0.04, fill: { color: ACCENT } });
+
+      const items = Array.isArray(body) ? body : [body];
+      items.forEach((item, i) => {
+        slide.addText(`• ${item}`, { x: 0.5, y: 1.2 + i * 0.55, w: '90%', fontSize: 14, color: LIGHT, bullet: false });
+      });
+    };
+
+    // Title slide
+    addSlide(title || analysis.finalRecommendation.clearDecision, `${analysis.problemDiagnosis.initialScope}`, true);
+
+    // Executive summary
+    addSlide('Executive Summary', [
+      analysis.finalRecommendation.clearDecision,
+      `Core issue: ${analysis.rootCauseAnalysis.coreIssue}`,
+      `Revenue impact: ${analysis.finalRecommendation.expectedImpact.revenueIncrease || 'See detail'}`,
+    ]);
+
+    // Problem diagnosis
+    addSlide('Problem Diagnosis', [
+      analysis.problemDiagnosis.restatedProblem,
+      `Type: ${analysis.problemDiagnosis.problemClassification.type}`,
+      analysis.problemDiagnosis.problemClassification.reasoning,
+    ]);
+
+    // Root cause
+    addSlide('Root Cause Analysis', [
+      analysis.rootCauseAnalysis.coreIssue,
+      ...(analysis.rootCauseAnalysis.causes?.slice(0, 3).map((c: any) => c.cause) || []),
+    ]);
+
+    // Strategic options
+    analysis.strategicOptions?.slice(0, 3).forEach((opt: any, i: number) => {
+      addSlide(`Option ${i + 1}: ${opt.name}`, [
+        opt.description,
+        `Pros: ${opt.pros?.slice(0, 2).join(', ')}`,
+        `Timeline: ${opt.timeToValue}`,
+        `Investment: ${opt.investmentRequired}`,
+      ]);
+    });
+
+    // Recommendation
+    addSlide('Recommendation', [
+      analysis.finalRecommendation.clearDecision,
+      analysis.finalRecommendation.partnerLevelInsight,
+      ...(analysis.finalRecommendation.successCriteria?.slice(0, 3) || []),
+    ]);
+
+    // Execution phases
+    ['phase1', 'phase2', 'phase3'].forEach((p: string) => {
+      const phase = (analysis.executionPlan as any)[p];
+      if (!phase) return;
+      addSlide(phase.name, phase.milestones || []);
+    });
+
+    // KPIs
+    const kpis = [...(analysis.kpiTrackingSystem.leadingIndicators || []).slice(0, 3)]
+      .map((k: any) => `${k.name}: ${k.target}`);
+    addSlide('KPI Tracking', kpis);
+
+    // Risks
+    addSlide('Key Risks', analysis.risksAndMitigation?.slice(0, 4).map((r: any) => `${r.risk}: ${r.mitigationStrategy}`) || []);
+
+    const buffer = await prs.write({ outputType: 'nodebuffer' }) as Buffer;
+    const filename = `StrategyOS-${(title || 'Analysis').replace(/\s+/g, '-')}.pptx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('PPTX error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /api/health
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString(), environment: process.env.NODE_ENV || 'development' });

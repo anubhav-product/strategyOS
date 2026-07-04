@@ -213,11 +213,32 @@ export class ConsultingEngine {
     this.problem = problem;
   }
 
-  async generateAnalysis(): Promise<ConsultingAnalysis> {
+  async streamAnalysis(onChunk: (chunk: string) => void): Promise<ConsultingAnalysis> {
     const firmInstruction = FIRM_STYLES[this.problem.firmStyle] || FIRM_STYLES.mckinsey;
+    const userMessage = this.buildUserMessage(firmInstruction);
 
-    const userMessage = `
-Consulting firm style: ${firmInstruction}
+    let fullText = '';
+    const stream = client.messages.stream({
+      model: 'claude-opus-4-8',
+      max_tokens: 16000,
+      messages: [{ role: 'user', content: userMessage }],
+      system: SYSTEM_PROMPT,
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        fullText += event.delta.text;
+        onChunk(event.delta.text);
+      }
+    }
+
+    const jsonStr = extractBalancedJSON(fullText);
+    if (!jsonStr) throw new Error('Claude did not return valid JSON');
+    return JSON.parse(jsonStr) as ConsultingAnalysis;
+  }
+
+  private buildUserMessage(firmInstruction: string): string {
+    return `Consulting firm style: ${firmInstruction}
 
 Business Problem:
 - Title: ${this.problem.title}
@@ -229,6 +250,11 @@ Business Problem:
 ${this.problem.reportTemplate ? `- Report Template: ${this.problem.reportTemplate}` : ''}
 
 Generate a complete, specific, and actionable consulting analysis for this exact problem. Every number, owner, and timeline must be specific to this business context — no generic templates.`;
+  }
+
+  async generateAnalysis(): Promise<ConsultingAnalysis> {
+    const firmInstruction = FIRM_STYLES[this.problem.firmStyle] || FIRM_STYLES.mckinsey;
+    const userMessage = this.buildUserMessage(firmInstruction);
 
     const response = await client.messages.create({
       model: 'claude-opus-4-8',
@@ -236,6 +262,7 @@ Generate a complete, specific, and actionable consulting analysis for this exact
       messages: [{ role: 'user', content: userMessage }],
       system: SYSTEM_PROMPT,
     });
+
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
